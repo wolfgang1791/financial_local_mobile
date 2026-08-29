@@ -1,0 +1,125 @@
+import 'dart:io';
+
+import 'package:financial_strategist_local/data/api.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../test_support.dart';
+
+void main() {
+  late Directory tmp;
+  late ApiClient api;
+
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(inicializarMotorDePrueba);
+
+  setUp(() async {
+    tmp = await prepararDirectorioTemporal('financial_strategist_local_flow_write_test');
+    api = ApiClient();
+  });
+
+  tearDown(() => tmp.delete(recursive: true));
+
+  test('pagar un flujo crea el movimiento, sube el saldo y marca "pagado este mes"', () async {
+    final flujos = await api.get('/recurring-flows') as List;
+    final sueldo = flujos.firstWhere((f) => f['name'] == 'Sueldo');
+    expect(sueldo['statusThisMonth'], 'PENDING');
+
+    final cuentas = await api.get('/accounts') as List;
+    final antes =
+        (cuentas.firstWhere((c) => c['id'] == sueldo['accountId'])['currentBalance'] as num)
+            .toDouble();
+
+    final resultado = await api.post('/recurring-flows/${sueldo['id']}/pay', const {}) as Map;
+    expect(resultado['transactionId'], isNotNull);
+
+    final cuentasDespues = await api.get('/accounts') as List;
+    final despues =
+        (cuentasDespues.firstWhere((c) => c['id'] == sueldo['accountId'])['currentBalance'] as num)
+            .toDouble();
+    expect(despues, closeTo(antes + (sueldo['amount'] as num).toDouble(), 0.001));
+
+    final flujosDespues = await api.get('/recurring-flows') as List;
+    final sueldoDespues = flujosDespues.firstWhere((f) => f['id'] == sueldo['id']);
+    expect(sueldoDespues['statusThisMonth'], 'PAID');
+
+    // Revertir deshace las dos cosas: el saldo vuelve y el estado vuelve a
+    // pendiente.
+    await api.post('/recurring-flows/${sueldo['id']}/revert-payment', const {});
+    final cuentasRevertido = await api.get('/accounts') as List;
+    expect(
+      (cuentasRevertido.firstWhere((c) => c['id'] == sueldo['accountId'])['currentBalance'] as num)
+          .toDouble(),
+      closeTo(antes, 0.001),
+    );
+    final flujosRevertido = await api.get('/recurring-flows') as List;
+    expect(
+      flujosRevertido.firstWhere((f) => f['id'] == sueldo['id'])['statusThisMonth'],
+      'PENDING',
+    );
+  });
+
+  test('crear, editar y borrar un flujo sin pagos se borra de verdad', () async {
+    final cuentas = await api.get('/accounts') as List;
+    final creado =
+        await api.post('/recurring-flows', {
+              'accountId': cuentas.first['id'],
+              'type': 'EXPENSE',
+              'name': 'Gimnasio',
+              'amount': 120,
+              'frequency': 'MONTHLY',
+              'startDate': '2026-01-01',
+              'nextDueDate': '2026-08-05',
+            })
+            as Map;
+    expect(creado['name'], 'Gimnasio');
+
+    await api.patch('/recurring-flows/${creado['id']}', {'amount': 135});
+    final flujos = await api.get('/recurring-flows') as List;
+    expect((flujos.firstWhere((f) => f['id'] == creado['id'])['amount'] as num).toDouble(), 135);
+
+    final borrado = await api.delete('/recurring-flows/${creado['id']}') as Map;
+    expect(borrado['archived'], false);
+    final flujosFinal = await api.get('/recurring-flows') as List;
+    expect(flujosFinal.any((f) => f['id'] == creado['id']), false);
+  });
+
+  test('crear un ingreso recurrente con lo que manda el formulario', () async {
+    // El formulario del móvil no mandaba `startDate` y la ruta lo casteaba a
+    // String: el error salía como "No llegué al servidor", que manda a buscar el
+    // problema en la red cuando estaba en el cuerpo.
+    final cuentas = await api.get('/accounts') as List;
+    final creado =
+        await api.post('/recurring-flows', {
+              'name': 'Clases de guitarra',
+              'type': 'INCOME',
+              'amount': 120,
+              'frequency': 'MONTHLY',
+              'startDate': '2026-08-21',
+              'nextDueDate': '2026-08-28',
+              'accountId': (cuentas.first as Map)['id'],
+            })
+            as Map<String, dynamic>;
+
+    expect(creado['name'], 'Clases de guitarra');
+    expect(creado['type'], 'INCOME');
+    expect(
+      (await api.get('/recurring-flows') as List).any((f) => (f as Map)['id'] == creado['id']),
+      isTrue,
+    );
+  });
+
+  test('sin startDate lo dice, en vez de parecer un problema de red', () async {
+    final cuentas = await api.get('/accounts') as List;
+    await expectLater(
+      api.post('/recurring-flows', {
+        'name': 'Sin fecha',
+        'type': 'EXPENSE',
+        'amount': 10,
+        'frequency': 'MONTHLY',
+        'nextDueDate': '2026-08-28',
+        'accountId': (cuentas.first as Map)['id'],
+      }),
+      throwsA(isA<ApiException>()),
+    );
+  });
+}

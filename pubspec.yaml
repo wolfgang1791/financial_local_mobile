@@ -1,0 +1,83 @@
+name: financial_strategist_local
+description: "Financial Strategist — copia 100% local, sin red: motor propio + SQLite embebido."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Estado. Riverpod y no un ChangeNotifier a mano porque la app tiene datos que
+  # varias pantallas comparten —el usuario, las cuentas, el periodo elegido— y
+  # sin un contenedor eso termina siendo props pasados por seis niveles.
+  flutter_riverpod: ^2.6.1
+  intl: ^0.19.0
+  share_plus: ^12.0.2
+  excel: ^4.0.6
+  # La zona real del teléfono, para las mismas cuentas de fecha que antes
+  # resolvía el backend (inicio de día/mes en la zona del usuario).
+  flutter_timezone: ^5.1.0
+  # Sin red: todo el motor vive acá y escribe en un SQLite propio del
+  # teléfono, sembrado al primer arranque desde `assets/seed/app.db`.
+  sqflite: ^2.4.2+1
+  path: ^1.9.1
+  path_provider: ^2.1.6
+  timezone: ^0.11.1
+  uuid: ^4.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  sqflite_common_ffi: ^2.4.0+3
+  path_provider_platform_interface: ^2.1.3
+  plugin_platform_interface: ^2.1.8
+  flutter_launcher_icons: ^0.14.4
+
+# El ícono de lanzador: el mismo "FS" blanco sobre #0a0a0a que usa la web
+# (favicon, icon-192/512, apple-icon) — un solo origen en assets/icon/icon.png
+# generado con el mismo diseño, y `flutter_launcher_icons` lo baja a cada
+# tamaño y plataforma. Se corre a mano con
+# `dart run flutter_launcher_icons` — no en cada build, así que no hace falta
+# volver a generarlo salvo que el ícono cambie.
+flutter_launcher_icons:
+  image_path: "assets/icon/icon.png"
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  min_sdk_android: 21
+  # El mismo cuadro de siempre como fondo del ícono adaptativo de Android —
+  # ya tiene su propio margen de seguridad, no hace falta un foreground
+  # recortado aparte.
+  adaptive_icon_background: "#0a0a0a"
+  adaptive_icon_foreground: "assets/icon/icon.png"
+
+flutter:
+  uses-material-design: true
+
+  # La base ya poblada con los datos reales del usuario (ver
+  # `lib/local_db/database.dart`): se copia al directorio de datos de la app
+  # en el primer arranque y de ahí en más se lee/escribe esa copia, no esta.
+  assets:
+    - assets/seed/app.db
+
+  # Las mismas dos fuentes que ya eligió la web (ver AppText en
+  # lib/design/theme.dart) y no las del sistema — empaquetadas como asset y
+  # no vía `google_fonts` para no depender de una descarga en el primer uso.
+  # Licencia OFL de las dos en assets/fonts-licenses/.
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Variable.ttf
+    - family: IBMPlexMono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/IBMPlexMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/IBMPlexMono-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/IBMPlexMono-Bold.ttf
+          weight: 700
