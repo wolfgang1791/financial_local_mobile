@@ -336,13 +336,37 @@ class _Casilla extends StatelessWidget {
   final List<({String id, String icono, String label})> marcas;
   final VoidCallback onTap;
 
+  /// El día con gasto, en azul pálido.
+  ///
+  /// El problema no era **cuál** azul sino cuánto: un emoji es multicolor y de
+  /// bajo contraste, así que sobre cualquier tono medio —azul saturado o
+  /// celeste— se pierde. El carrito es gris plomo, la hamburguesa tiene
+  /// marrones, y ninguno de los dos gana contra un fondo con color propio.
+  ///
+  /// La casilla es el fondo de esos íconos, así que la casilla es la que cede:
+  /// 28% de azul sobre blanco. Queda un papel azulado sobre el que un ícono
+  /// oscuro se lee solo, sin tira, sin parche y sin pedirle nada al ícono. Lo
+  /// que se pierde —el peso visual del azul— lo recupera el contraste con el
+  /// gris apagado de los días sin gasto, que es la comparación que de verdad
+  /// importa en esta rejilla.
+  ///
+  /// Un solo número que tocar si hay que ajustarlo, y sale del mismo `chart[0]`
+  /// que ya cambia entre tema claro y oscuro.
+  static Color _celeste(AppColors colors) =>
+      Color.lerp(colors.chartAt(0), const Color(0xFFFFFFFF), 0.72)!;
+
+  /// La tinta sobre el celeste. Fija y no la del tema: la casilla es clara en
+  /// los dos, así que un texto que siguiera al tema se volvería blanco sobre
+  /// claro en el oscuro.
+  static const _tintaConGasto = Color(0xFF0E2A45);
+
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.of(context);
     final extremo = _extremoDe(dia, vista, colors);
     final fondo =
         extremo?.color ??
-        (dia.conGasto ? colors.chartAt(0) : colors.chartOther.withValues(alpha: 0.45));
+        (dia.conGasto ? _celeste(colors) : colors.chartOther.withValues(alpha: 0.45));
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -368,8 +392,15 @@ class _Casilla extends StatelessWidget {
                       children: [
                         Text(
                           '${dia.day}',
+                          // Blanco sobre los extremos, que siguen saturados;
+                          // tinta oscura sobre el celeste; el color del tema en
+                          // los días sin gasto, que van apagados.
                           style: AppText.tiny(
-                            dia.conGasto ? const Color(0xFFFFFFFF) : colors.foreground,
+                            extremo != null
+                                ? const Color(0xFFFFFFFF)
+                                : dia.conGasto
+                                ? _tintaConGasto
+                                : colors.foreground,
                           ).copyWith(fontWeight: FontWeight.w600),
                         ),
                         if (extremo != null)
@@ -384,10 +415,46 @@ class _Casilla extends StatelessWidget {
                     // Los íconos van dentro de la casilla, bajo el número: son
                     // marcas de ese día, y afuera serían otra fila de cosas que
                     // leer.
+                    //
+                    // Iban a 8 y pegados uno a otro: a ese tamaño una
+                    // hamburguesa y un carrito son dos manchas del mismo color,
+                    // y dos manchas juntas sobre el azul de la casilla no se
+                    // distinguen ni entre sí ni del fondo. Van más grandes y con
+                    // aire entre ellos.
+                    //
+                    // El tamaño encoge con la cantidad —el máximo son tres, lo
+                    // limita el selector de marcas— para que tres no se salgan
+                    // por los lados.
                     if (marcas.isNotEmpty)
-                      Text(
-                        marcas.map((m) => m.icono).join(),
-                        style: AppText.tiny(colors.foreground).copyWith(fontSize: 8),
+                      Container(
+                        margin: const EdgeInsets.only(top: 2),
+                        padding: extremo != null
+                            ? const EdgeInsets.symmetric(horizontal: 3, vertical: 1)
+                            : EdgeInsets.zero,
+                        // Sin tira salvo en los dos extremos: la casilla normal
+                        // ya es celeste y un ícono oscuro se lee encima. Rojo y
+                        // verde siguen saturados, así que ahí sí lleva un fondo
+                        // claro que los rescate.
+                        decoration: extremo != null
+                            ? BoxDecoration(
+                                color: const Color(0x8CFFFFFF),
+                                borderRadius: BorderRadius.circular(3),
+                              )
+                            : null,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (final (i, m) in marcas.indexed) ...[
+                              if (i > 0) const SizedBox(width: 2),
+                              Text(
+                                m.icono,
+                                style: AppText.tiny(
+                                  colors.foreground,
+                                ).copyWith(fontSize: const [0.0, 12.0, 11.0, 9.0][marcas.length]),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                   ],
                 ),
