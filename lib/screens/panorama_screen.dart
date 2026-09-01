@@ -153,6 +153,31 @@ class _PanoramaScreenState extends ConsumerState<PanoramaScreen> {
       ),
   ];
 
+  /// El cierre de cada mes a partir de la serie diaria: el último día de cada
+  /// mes que aparezca.
+  ///
+  /// Es como se arma la mensual sin filtro del otro lado, así que filtrada tiene
+  /// que armarse igual — de lo contrario los mismos meses saldrían de dos
+  /// caminos distintos y un día dirían cifras distintas.
+  List<NetWorthPoint> _mesesDe(List<NetWorthPoint> diaria) {
+    final cierre = <String, double>{};
+    for (final p in diaria) {
+      // "2026-08-14" → "2026-08". Recorridos en orden, el último gana.
+      cierre[p.etiqueta.substring(0, 7)] = p.liquid;
+    }
+    final claves = cierre.keys.toList()..sort();
+    return [
+      for (final (i, mes) in claves.indexed)
+        NetWorthPoint(
+          etiqueta: mes,
+          liquid: cierre[mes]!,
+          // El último mes de la serie es el que está corriendo: su cierre es el
+          // saldo de hoy, no el del día 31.
+          enCurso: i == claves.length - 1,
+        ),
+    ];
+  }
+
   List<Transaction> _contando(List<Transaction> gastos) => gastos
       .where((t) => !(_sinFijos && t.recurringFlowId != null))
       .where((t) => !(_sinDeudas && t.debtId != null))
@@ -422,6 +447,11 @@ class _PanoramaScreenState extends ConsumerState<PanoramaScreen> {
                 error: (_, __) => const _NoCargo(),
                 data: (puntos) {
                   final cuentas = posicion.valueOrNull?.accounts ?? const <CashPositionAccount>[];
+                  // La serie diaria, para poder recomponer la mensual al
+                  // filtrar. Se pide siempre: el provider la cachea, y en la
+                  // escala diaria es la misma que ya se está mirando.
+                  final diaria =
+                      ref.watch(netWorthDailyProvider).valueOrNull ?? const <NetWorthPoint>[];
                   final elegidas =
                       _cuentasDeLaCurva ??
                       cuentas.where((c) => !c.isHidden).map((c) => c.id).toSet();
@@ -437,14 +467,28 @@ class _PanoramaScreenState extends ConsumerState<PanoramaScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       NetWorthChart(
-                        points: filtrando ? _curvaDe(puntos, elegidas) : puntos,
+                        // Con filtro, la curva se recompone desde la serie
+                        // **diaria**: es la única que trae el saldo de cada
+                        // cuenta. Los puntos mensuales no lo traen, así que
+                        // filtrarlos directamente daba cero en todos y la curva
+                        // se caía a plano — que es lo que se veía al filtrar en
+                        // días y cambiar a meses.
+                        points: !filtrando
+                            ? puntos
+                            : _porDia
+                            ? _curvaDe(puntos, elegidas)
+                            : _mesesDe(_curvaDe(diaria, elegidas)),
                         currency: user.currency,
                         // Solo en la escala diaria: en la mensual cada punto es
                         // un mes cerrado, y reservar días sueltos al final no
                         // significaría nada sobre ese eje.
                         diasRestantes: _porDia ? Fechas.diasDelMes().faltan : 0,
                       ),
-                      if (cuentas.length > 1 && _porDia)
+                      // En las dos escalas, no solo en días: estaban ocultos en
+                      // mensual, así que filtrar en días y cambiar a meses dejaba
+                      // una curva recortada sin nada que dijera por qué ni cómo
+                      // deshacerlo.
+                      if (cuentas.length > 1)
                         _CuentasDeLaCurva(
                           cuentas: cuentas,
                           elegidas: elegidas,
