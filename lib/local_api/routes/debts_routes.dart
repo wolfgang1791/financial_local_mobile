@@ -239,9 +239,7 @@ void registerDebtsRoutes() {
     );
     final portes = round2(
       positivo(
-        (datos['fees'] as num?)?.toDouble() ??
-            (pago['debtFeesApplied'] as num?)?.toDouble() ??
-            0,
+        (datos['fees'] as num?)?.toDouble() ?? (pago['debtFeesApplied'] as num?)?.toDouble() ?? 0,
       ),
     );
 
@@ -267,9 +265,7 @@ void registerDebtsRoutes() {
     }
 
     if (capital + interes + seguro + portes > pagado + 0.01) {
-      throw ApiException(
-        'Las partes suman más de lo que pagaste ($pagado). Revisa el desglose.',
-      );
+      throw ApiException('Las partes suman más de lo que pagaste ($pagado). Revisa el desglose.');
     }
 
     // Amortizar más de lo que se debe dejaría la deuda en negativo. El tope es
@@ -492,8 +488,7 @@ void registerDebtsRoutes() {
         // Sin cronograma se estima sobre el saldo: una tarjeta no tiene cuotas
         // proyectadas, pero sí cobra interés todos los meses.
         nextInterestPortion:
-            (proxima?['interestPortion'] as num?)?.toDouble() ??
-            _interesDelMesSinCronograma(deuda),
+            (proxima?['interestPortion'] as num?)?.toDouble() ?? _interesDelMesSinCronograma(deuda),
         hasScheduledPayment: proxima != null,
         clock: clock,
         isActive: (deuda['isActive'] as int? ?? 1) == 1,
@@ -838,8 +833,7 @@ void registerDebtsRoutes() {
     // el banco cobra como interés: sobre una tarjeta al 66% TEA con S/ 8,116 de
     // saldo son S/ 350 al mes que la app daba por amortizados y el banco no.
     final monthInterest =
-        (proxima?['interestPortion'] as num?)?.toDouble() ??
-        _interesDelMesSinCronograma(deuda);
+        (proxima?['interestPortion'] as num?)?.toDouble() ?? _interesDelMesSinCronograma(deuda);
     final interestDue = (monthInterest - interestPaidSoFar).clamp(0, double.infinity);
     // Lo declarado manda sobre lo estimado: con el estado de cuenta delante, esa
     // es la verdad. Antes se guardaba lo declarado pero se repartía con lo

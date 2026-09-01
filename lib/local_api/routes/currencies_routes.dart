@@ -133,13 +133,15 @@ void registerCurrenciesRoutes() {
     final borradas = await db.delete(
       'ExchangeRate',
       where: 'baseCode = ? AND quoteCode = ? AND date = ? AND source = ?',
-      whereArgs: [base, quote, DateTime.parse('${dia}T00:00:00.000Z').millisecondsSinceEpoch, _fuenteManual],
+      whereArgs: [
+        base,
+        quote,
+        DateTime.parse('${dia}T00:00:00.000Z').millisecondsSinceEpoch,
+        _fuenteManual,
+      ],
     );
     if (borradas == 0) {
-      throw ApiException(
-        'No hay un tipo de cambio tuyo de $base a $quote el $dia.',
-        status: 404,
-      );
+      throw ApiException('No hay un tipo de cambio tuyo de $base a $quote el $dia.', status: 404);
     }
     return {'borrado': true};
   });

@@ -4,9 +4,6 @@
 import 'dart:io';
 
 import 'package:financial_strategist_local/data/api.dart';
-import 'package:financial_strategist_local/local_api/current_user.dart';
-import 'package:financial_strategist_local/local_db/database.dart';
-import 'package:financial_strategist_local/local_engine/user_clock.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../test_support.dart';
@@ -50,16 +47,29 @@ void main() {
     final sip = cuentas.firstWhere((c) => c['name'] == 'sip');
     expect(sip['isHidden'], true);
 
+    // El mes que devuelve es el **en curso**, así que su clave y sus cifras
+    // cambian solas al pasar de mes. Estaba escrito '2026-08' con las cifras de
+    // agosto y bastó que llegara septiembre para que fallara sin que nada se
+    // hubiera roto. Lo que se comprueba es la regla: es el mes de hoy y su neto
+    // cuadra con sus dos mitades.
     final mes = r['month'] as Map;
-    expect(mes['key'], '2026-08');
-    expect((mes['income'] as num).toDouble(), 0);
-    expect((mes['expenses'] as num).toDouble(), 1187.33);
-    expect((mes['net'] as num).toDouble(), -1187.33);
+    expect(mes['key'], (await hoyDelUsuario()).substring(0, 7));
+    final entro = (mes['income'] as num).toDouble();
+    final salio = (mes['expenses'] as num).toDouble();
+    expect((mes['net'] as num).toDouble(), closeTo(entro - salio, 0.01));
   });
 
-  test('GET /financial-engine/net-worth-history — mismos 2 meses, mismas cifras', () async {
+  test('GET /financial-engine/net-worth-history — los meses cerrados no se mueven', () async {
     final r = await api.get('/financial-engine/net-worth-history') as List;
-    expect(r.length, 2);
+    // La serie crece un punto por mes, así que el largo no es un valor de oro:
+    // estaba escrito 2 y bastó que llegara septiembre para que fallara. Lo que
+    // no puede cambiar es lo que ya cerró.
+    expect(r.length, greaterThanOrEqualTo(2));
+    // Solo el último está en curso: dos meses marcados así harían pensar que hay
+    // dos meses sin terminar.
+    expect(r.where((p) => p['inProgress'] == true).length, 1);
+    expect(r.last['inProgress'], true);
+    expect(r.last['month'], (await hoyDelUsuario()).substring(0, 7));
 
     final julio = r.firstWhere((p) => p['month'] == '2026-07');
     expect((julio['liquid'] as num).toDouble(), 2629.13);
@@ -69,10 +79,12 @@ void main() {
     expect((julio['expenses'] as num).toDouble(), 8836.54);
     expect(julio['inProgress'], false);
 
+    // Agosto cerró en el mismo saldo con el que se lo veía en curso: la base
+    // sembrada no tiene movimientos posteriores, así que cerrar el mes no lo
+    // movió — lo que cambió es que ya no está en curso.
     final agosto = r.firstWhere((p) => p['month'] == '2026-08');
     expect((agosto['liquid'] as num).toDouble(), 1408.97);
     expect((agosto['delta'] as num).toDouble(), closeTo(-1220.16, 0.01));
-    expect(agosto['inProgress'], true);
   });
 
   test(
@@ -84,7 +96,7 @@ void main() {
       // es la regla y no el número: arranca en el primer registro de la base
       // sembrada, termina hoy, y entre medio no falta ni sobra un día.
       expect(r.first['date'], _primerRegistroSembrado);
-      expect(r.last['date'], await _hoyDelUsuario());
+      expect(r.last['date'], await hoyDelUsuario());
       expect(r.length, _diasEntre(_primerRegistroSembrado, r.last['date'] as String) + 1);
 
       expect((r.last['liquid'] as num).toDouble(), 1408.97);
@@ -126,18 +138,3 @@ int _diasEntre(String desde, String hasta) =>
 /// Se le pregunta al mismo reloj que usa el motor y no a `DateTime.now()`: la
 /// serie se corta en el día del usuario, y cerca de medianoche la zona del
 /// dispositivo y la suya no están en la misma fecha.
-Future<String> _hoyDelUsuario() async {
-  final db = await LocalDatabase.open();
-  final clock = UserClock(
-    (await db.query(
-          'User',
-          columns: ['timezone'],
-          where: 'id = ?',
-          whereArgs: [await currentUserId(db)],
-          limit: 1,
-        )).first['timezone']
-        as String,
-  );
-  final p = clock.parts();
-  return '${p.year}-${p.month.toString().padLeft(2, '0')}-${p.day.toString().padLeft(2, '0')}';
-}

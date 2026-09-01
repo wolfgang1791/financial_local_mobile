@@ -485,6 +485,66 @@ class _Calendario extends StatelessWidget {
       celdas.add(d);
     }
 
+    // Un tramo muy corto no se dibuja como calendario.
+    //
+    // "Esta semana" un martes son dos días, y si además cruzan de mes salían dos
+    // rejillas de siete columnas con sus siete cabeceras y cinco filas vacías
+    // cada una, para mostrar dos casillas. El andamio del calendario —los
+    // huecos, la cuadrícula— sirve para ver la forma de un mes; con una semana
+    // no hay forma que ver y solo queda el andamio.
+    //
+    // Diez días es donde deja de pagar: hasta ahí caben en una fila y cada uno
+    // lleva su letra encima, que es la única parte del calendario que de verdad
+    // hacía falta —saber que ese gasto fue un sábado—.
+    if (vista.days.length <= 10) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          for (final entrada in bloques.entries) ...[
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _mesesLargos[int.parse(entrada.key.split('-')[1]) - 1],
+                  style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.6)),
+                ),
+                const SizedBox(height: Spacing.xs),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final dia in entrada.value.whereType<SpendingDay>()) ...[
+                      const SizedBox(width: 4),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _diasSemana[dia.weekday],
+                            style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.45)),
+                          ),
+                          const SizedBox(height: 3),
+                          _Casilla(
+                            dia: dia,
+                            vista: vista,
+                            tam: 44,
+                            conNumero: true,
+                            esHoy: dia.date == hoy,
+                            marcas: estado._marcasDe(dia),
+                            onTap: () => estado.tocar(dia),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: Spacing.lg),
+          ],
+        ],
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         // Las casillas ocupan el ancho disponible, sin pasarse de 44: en una

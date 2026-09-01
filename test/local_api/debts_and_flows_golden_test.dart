@@ -46,7 +46,16 @@ void main() {
       final prestamo = r.firstWhere((d) => d['debtTypeCode'] == 'PERSONAL_LOAN');
       expect((prestamo['currentBalance'] as num).toDouble(), 93199.41);
       expect(prestamo['statusThisMonth'], 'PENDING');
-      expect(prestamo['missedMonths'], isEmpty);
+      // Los meses que pasaron sin pagar se acumulan solos, así que la lista
+      // vacía no era un valor de oro: estaba escrita `isEmpty` y bastó que
+      // llegara septiembre —con agosto sin marcar en la base sembrada— para que
+      // fallara. Lo que sí es regla: todos son meses **pasados**. El mes en
+      // curso no puede estar incumplido, todavía se puede pagar, y por eso vive
+      // en `statusThisMonth`.
+      final mesActual = (await hoyDelUsuario()).substring(0, 7);
+      for (final mes in prestamo['missedMonths'] as List) {
+        expect((mes as String).compareTo(mesActual), lessThan(0), reason: '$mes ya pasó');
+      }
       expect((prestamo['pendingThisMonth'] as num).toDouble(), 1694.77);
       expect((prestamo['installmentInterest'] as num).toDouble(), 1016.33);
       expect((prestamo['interestPendingThisMonth'] as num).toDouble(), 1016.33);

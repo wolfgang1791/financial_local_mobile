@@ -74,23 +74,20 @@ void main() {
   test('cero no es una cotización', () async {
     // Con un cero de por medio, una deuda en dólares valdría cero soles.
     await expectLater(
-      api.put('/currencies/rates', {
-        'baseCode': 'USD',
-        'quoteCode': 'PEN',
-        'buy': 0,
-        'sell': 3.5,
-      }),
+      api.put('/currencies/rates', {'baseCode': 'USD', 'quoteCode': 'PEN', 'buy': 0, 'sell': 3.5}),
       throwsA(isA<ApiException>()),
     );
   });
 
   test('sin fecha se guarda con el día del usuario, no con el de UTC', () async {
-    final r = await api.put('/currencies/rates', {
-      'baseCode': 'USD',
-      'quoteCode': 'PEN',
-      'buy': 3.41,
-      'sell': 3.52,
-    }) as Map<String, dynamic>;
+    final r =
+        await api.put('/currencies/rates', {
+              'baseCode': 'USD',
+              'quoteCode': 'PEN',
+              'buy': 3.41,
+              'sell': 3.52,
+            })
+            as Map<String, dynamic>;
 
     // A las diez de la noche en Lima, `DateTime.now()` en UTC ya es mañana: si
     // se guardara así, el tipo de cambio de hoy quedaría fechado en un día que

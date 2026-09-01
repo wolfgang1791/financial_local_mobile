@@ -58,28 +58,28 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-          userProvider.overrideWithValue(
-            AppUser.fromJson({
-              'id': 'u1',
-              'name': 'Prueba',
-              'email': 'p@p.pe',
-              'currency': 'PEN',
-              'timezone': 'America/Lima',
-            }),
-          ),
-        ],
-        child: AppTheme(
-          colors: AppColors.light,
-          child: const Directionality(
-            textDirection: TextDirection.ltr,
-            child: MediaQuery(
-              data: MediaQueryData(size: Size(390, 1600)),
-              // Se llega como se llega desde el anillo: con un origen puesto.
-              child: HistorialScreen(origen: 'fijos'),
+            userProvider.overrideWithValue(
+              AppUser.fromJson({
+                'id': 'u1',
+                'name': 'Prueba',
+                'email': 'p@p.pe',
+                'currency': 'PEN',
+                'timezone': 'America/Lima',
+              }),
+            ),
+          ],
+          child: AppTheme(
+            colors: AppColors.light,
+            child: const Directionality(
+              textDirection: TextDirection.ltr,
+              child: MediaQuery(
+                data: MediaQueryData(size: Size(390, 1600)),
+                // Se llega como se llega desde el anillo: con un origen puesto.
+                child: HistorialScreen(origen: 'fijos'),
+              ),
             ),
           ),
         ),
-      ),
       );
       // Se espera a que la lista llegue, no un rato fijo: con la suite entera
       // corriendo en paralelo, sqflite tarda más que sola y un `delayed` a ojo

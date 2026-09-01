@@ -70,12 +70,12 @@ void main() {
 
   test('el par no mueve el saldo, y correrlo otra vez no duplica nada', () async {
     final db = await LocalDatabase.open();
-    final saldos = (await db.query('Account', columns: ['id', 'currentBalance'], orderBy: 'id'))
-        .map((c) => '${c['id']}:${c['currentBalance']}')
-        .join(',');
-    final cuantos = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT count(*) FROM "Transaction"'),
-    );
+    final saldos = (await db.query(
+      'Account',
+      columns: ['id', 'currentBalance'],
+      orderBy: 'id',
+    )).map((c) => '${c['id']}:${c['currentBalance']}').join(',');
+    final cuantos = Sqflite.firstIntValue(await db.rawQuery('SELECT count(*) FROM "Transaction"'));
 
     await LocalDatabase.resetForTests();
     final db2 = await LocalDatabase.open();
@@ -85,9 +85,11 @@ void main() {
       cuantos,
     );
     expect(
-      (await db2.query('Account', columns: ['id', 'currentBalance'], orderBy: 'id'))
-          .map((c) => '${c['id']}:${c['currentBalance']}')
-          .join(','),
+      (await db2.query(
+        'Account',
+        columns: ['id', 'currentBalance'],
+        orderBy: 'id',
+      )).map((c) => '${c['id']}:${c['currentBalance']}').join(','),
       saldos,
     );
   });
@@ -104,11 +106,7 @@ void main() {
 
       // La cuenta y la deuda son el mismo número visto desde dos tablas: si se
       // separan, la pantalla de deudas y la de patrimonio dicen cosas distintas.
-      final deuda = await db.query(
-        'Debt',
-        where: 'accountId = ?',
-        whereArgs: [cuenta.first['id']],
-      );
+      final deuda = await db.query('Debt', where: 'accountId = ?', whereArgs: [cuenta.first['id']]);
       expect((deuda.first['currentBalance'] as num).toDouble(), saldo);
     }
   });

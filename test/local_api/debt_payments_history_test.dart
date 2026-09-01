@@ -66,10 +66,7 @@ void main() {
       (ultimo['balanceAfter'] as num).toDouble(),
       closeTo((deudaAhora['currentBalance'] as num).toDouble(), 0.01),
     );
-    expect(
-      (ultimo['balanceBefore'] as num).toDouble(),
-      closeTo(saldoAntes, 0.01),
-    );
+    expect((ultimo['balanceBefore'] as num).toDouble(), closeTo(saldoAntes, 0.01));
   });
 
   test('una tarjeta sin cronograma también cobra interés', () async {

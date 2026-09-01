@@ -46,15 +46,19 @@ void main() {
 
   test('el colchón se pone solo en una base que ya existía, y una sola vez', () async {
     final db = await LocalDatabase.open();
-    final saldoAntes = (await db.query('Account', columns: ['id', 'currentBalance']))
-        .map((c) => '${c['id']}:${c['currentBalance']}')
-        .join(',');
+    final saldoAntes = (await db.query(
+      'Account',
+      columns: ['id', 'currentBalance'],
+    )).map((c) => '${c['id']}:${c['currentBalance']}').join(',');
 
     // Un teléfono instalado antes de este arreglo: tiene los movimientos, no
     // tiene el colchón.
     await db.delete('"Transaction"', where: "id LIKE 'colchon-%'");
-    expect((await curva()).any((p) => (p['liquid'] as num) < 0), isTrue,
-        reason: 'sin el colchón, la curva se hunde');
+    expect(
+      (await curva()).any((p) => (p['liquid'] as num) < 0),
+      isTrue,
+      reason: 'sin el colchón, la curva se hunde',
+    );
 
     // Y al abrir la app, aparece.
     await LocalDatabase.resetForTests();
@@ -80,17 +84,20 @@ void main() {
     );
 
     // ...y en ningún momento tocó un saldo.
-    final saldoDespues = (await db3.query('Account', columns: ['id', 'currentBalance']))
-        .map((c) => '${c['id']}:${c['currentBalance']}')
-        .join(',');
+    final saldoDespues = (await db3.query(
+      'Account',
+      columns: ['id', 'currentBalance'],
+    )).map((c) => '${c['id']}:${c['currentBalance']}').join(',');
     expect(saldoDespues, saldoAntes);
   });
 
   test('el colchón no cuenta como ingreso ni como gasto de julio', () async {
     await LocalDatabase.open();
-    final julio = await api.get(
-      '/transactions?from=2026-07-01T05:00:00.000Z&to=2026-08-01T04:59:59.000Z&take=300',
-    ) as Map<String, dynamic>;
+    final julio =
+        await api.get(
+              '/transactions?from=2026-07-01T05:00:00.000Z&to=2026-08-01T04:59:59.000Z&take=300',
+            )
+            as Map<String, dynamic>;
 
     final totales = julio['totals'] as Map<String, dynamic>;
     final items = (julio['items'] as List).cast<Map<String, dynamic>>();
