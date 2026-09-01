@@ -812,6 +812,10 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
     final colors = AppTheme.of(context);
     final user = ref.watch(userProvider);
     final posicion = ref.watch(cashPositionProvider);
+    // Con una sola cuenta el nombre no aporta: sería la misma palabra en cada
+    // fila. Con dos es lo que uno viene a comprobar.
+    final variasCuentas = (ref.watch(accountsProvider).valueOrNull ?? const []).length > 1;
+
     // Cuántas filas quedan sin mostrar, que es lo que decide si hay "ver más".
     final faltan = _total - _items.length > 0 ? _total - _items.length : 0;
 
@@ -1190,6 +1194,7 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
                           oculto: _ocultos.contains(t.id),
                           onAlternar: _alternarOculto,
                           mostrarSaldoPrevio: _orden == null,
+                          mostrarCuenta: variasCuentas,
                         ),
                     ],
                   ),
@@ -1200,6 +1205,7 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
                   currency: user.currency,
                   ocultos: _ocultos,
                   onAlternar: _alternarOculto,
+                  mostrarCuenta: variasCuentas,
                 ),
 
         // El pie de la lista: cuánto se ve, cuánto falta y el botón para
@@ -1499,6 +1505,7 @@ String _tituloGrupo(DateTime d, String agrupacion) => switch (agrupacion) {
 
 class _ListaAgrupada extends StatelessWidget {
   const _ListaAgrupada({
+    required this.mostrarCuenta,
     required this.items,
     required this.agrupacion,
     required this.currency,
@@ -1511,6 +1518,7 @@ class _ListaAgrupada extends StatelessWidget {
   final String currency;
   final Set<String> ocultos;
   final void Function(String id) onAlternar;
+  final bool mostrarCuenta;
 
   @override
   Widget build(BuildContext context) {
@@ -1588,6 +1596,7 @@ class _FilaHistorial extends StatelessWidget {
     required this.oculto,
     required this.onAlternar,
     this.mostrarSaldoPrevio = true,
+    this.mostrarCuenta = false,
   });
 
   final Transaction t;
@@ -1607,6 +1616,12 @@ class _FilaHistorial extends StatelessWidget {
   /// debajo del otro y parece que el dinero fue y vino. La cifra no está mal;
   /// presentarla en ese orden sí.
   final bool mostrarSaldoPrevio;
+
+  /// Si la fila dice a qué cuenta fue.
+  ///
+  /// Solo con más de una cuenta: con una sola, repetir su nombre en cada fila es
+  /// decir lo mismo cincuenta veces.
+  final bool mostrarCuenta;
 
   String get _etiqueta => switch (t.kind) {
     'TRANSFER' => t.detail.isNotEmpty ? t.detail : 'Transferencia',
@@ -1641,6 +1656,7 @@ class _FilaHistorial extends StatelessWidget {
                   [
                     if (t.kind == 'MOVEMENT') t.category?.name,
                     if (t.kind == 'MOVEMENT') MediosDePago.etiqueta(t.paymentMethod),
+                    if (mostrarCuenta && t.accountName.isNotEmpty) t.accountName,
                     Fechas.diaConAnio(t.occurredAt.toLocal()),
                   ].whereType<String>().join(' · '),
                   style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.55)),

@@ -77,6 +77,7 @@ class MovimientosScreen extends ConsumerWidget {
           data: (lista) => _Recientes(
             transacciones: lista.where((t) => t.kind != 'OPENING_BALANCE').take(12).toList(),
             currency: user.currency,
+            mostrarCuenta: (ref.watch(accountsProvider).valueOrNull ?? const []).length > 1,
           ),
         ),
         const SizedBox(height: Spacing.xl),
@@ -1232,10 +1233,15 @@ String _mesLargo(String clave) {
 }
 
 class _Recientes extends StatelessWidget {
-  const _Recientes({required this.transacciones, required this.currency});
+  const _Recientes({
+    required this.transacciones,
+    required this.currency,
+    required this.mostrarCuenta,
+  });
 
   final List<Transaction> transacciones;
   final String currency;
+  final bool mostrarCuenta;
 
   @override
   Widget build(BuildContext context) {
@@ -1270,7 +1276,8 @@ class _Recientes extends StatelessWidget {
               style: AppText.small(colors.oliveInk.withValues(alpha: 0.7)),
             )
           else
-            for (final t in transacciones) _FilaMovimiento(t: t, currency: currency),
+            for (final t in transacciones)
+              _FilaMovimiento(t: t, currency: currency, mostrarCuenta: mostrarCuenta),
         ],
       ),
     );
@@ -1278,10 +1285,17 @@ class _Recientes extends StatelessWidget {
 }
 
 class _FilaMovimiento extends StatelessWidget {
-  const _FilaMovimiento({required this.t, required this.currency});
+  const _FilaMovimiento({required this.t, required this.currency, required this.mostrarCuenta});
 
   final Transaction t;
   final String currency;
+
+  /// Si la fila dice a qué cuenta fue.
+  ///
+  /// Solo con más de una cuenta: con una sola, repetir su nombre en cada fila es
+  /// decir lo mismo veinte veces. Con dos es justo lo que uno quiere comprobar
+  /// de un vistazo después de registrar — que la plata cayó donde la mandaste.
+  final bool mostrarCuenta;
 
   String get _etiqueta => switch (t.kind) {
     'TRANSFER' => t.detail.isNotEmpty ? t.detail : 'Transferencia',
@@ -1325,6 +1339,7 @@ class _FilaMovimiento extends StatelessWidget {
                     // en la web: es lo que contesta "¿esto ya salió de la
                     // cuenta o lo pagué con la tarjeta?" sin abrir la fila.
                     if (t.kind == 'MOVEMENT') MediosDePago.etiqueta(t.paymentMethod),
+                    if (mostrarCuenta && t.accountName.isNotEmpty) t.accountName,
                     Fechas.dia(t.occurredAt),
                   ].whereType<String>().join(' · '),
                   style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.6)),

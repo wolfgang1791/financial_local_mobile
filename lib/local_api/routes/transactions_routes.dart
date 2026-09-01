@@ -149,10 +149,32 @@ Future<(String, List<Object?>)> _whereYArgs(Database db, String userId, Uri uri)
 
 Future<Map<String, dynamic>> _transactionJson(Database db, Map<String, Object?> fila) async {
   final base = mapRow(fila, columnasFecha: _columnasFecha);
+
+  // El nombre de la cuenta viaja con el movimiento.
+  //
+  // Antes solo iba el `accountId`, así que ninguna lista podía decir a dónde
+  // fue la plata: se elegía la cuenta al registrar y después no había forma de
+  // comprobarlo sin abrir el editor. Con dos cuentas eso es justo lo que uno
+  // quiere verificar de un vistazo.
+  final cuentas = await db.query(
+    'Account',
+    columns: ['id', 'name'],
+    where: 'id = ?',
+    whereArgs: [fila['accountId']],
+    limit: 1,
+  );
+  final cuenta = cuentas.isEmpty
+      ? null
+      : {'id': cuentas.first['id'], 'name': cuentas.first['name']};
+
   final categoryId = fila['categoryId'] as String?;
-  if (categoryId == null) return {...base, 'category': null};
+  if (categoryId == null) return {...base, 'account': cuenta, 'category': null};
   final categoria = await db.query('Category', where: 'id = ?', whereArgs: [categoryId], limit: 1);
-  return {...base, 'category': categoria.isEmpty ? null : await categoryJson(db, categoria.first)};
+  return {
+    ...base,
+    'account': cuenta,
+    'category': categoria.isEmpty ? null : await categoryJson(db, categoria.first),
+  };
 }
 
 void registerTransactionsRoutes() {

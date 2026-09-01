@@ -92,6 +92,7 @@ class Transaction {
   const Transaction({
     required this.id,
     required this.accountId,
+    this.accountName = '',
     required this.amount,
     required this.type,
     required this.kind,
@@ -108,6 +109,7 @@ class Transaction {
   factory Transaction.fromJson(Map<String, dynamic> j) => Transaction(
     id: j['id'] as String,
     accountId: (j['accountId'] as String?) ?? '',
+    accountName: ((j['account'] as Map?)?['name'] as String?) ?? '',
     amount: _num(j['amount']),
     type: (j['type'] as String?) ?? 'EXPENSE',
     kind: (j['kind'] as String?) ?? 'MOVEMENT',
@@ -125,6 +127,10 @@ class Transaction {
 
   final String id;
   final String accountId;
+
+  /// El nombre de la cuenta donde cayó, para poder decirlo en la fila sin que
+  /// cada lista tenga que ir a buscarlo por su id.
+  final String accountName;
   final double amount;
   final String type;
   final String kind;

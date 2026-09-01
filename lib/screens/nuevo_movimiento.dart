@@ -123,7 +123,12 @@ class _FormularioState extends ConsumerState<_Formulario> {
       ref
         ..invalidate(cashPositionProvider)
         ..invalidate(recentTransactionsProvider)
-        ..invalidate(periodTransactionsProvider);
+        ..invalidate(periodTransactionsProvider)
+        // Y las cuentas: un movimiento cambia el saldo de la suya, y sin esto el
+        // selector del formulario —y el de pagar una cuota— seguían mostrando el
+        // saldo de antes. Registrar en una cuenta y que la cuenta no se entere es
+        // exactamente lo que hace desconfiar de la cifra.
+        ..invalidate(accountsProvider);
 
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
