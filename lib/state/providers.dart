@@ -67,6 +67,43 @@ class SaldosOcultos extends Notifier<bool> {
 
 final saldosOcultosProvider = NotifierProvider<SaldosOcultos, bool>(SaldosOcultos.new);
 
+/// Si la tarjeta de "te falta pagar este mes" está desplegada.
+///
+/// Es la más alta de Panorama —cinco filas— y hay meses en que ya sabes lo que
+/// dice y solo estorba para llegar a lo de abajo. Se recuerda entre visitas: una
+/// preferencia que se olvida al abrir la app no es una preferencia, y el usuario
+/// deja de tocarla.
+///
+/// Arranca desplegada y se corrige al leer el archivo, igual que el ojo: mostrar
+/// de más por un fotograma es preferible a plegar lo que nadie pidió plegar.
+class PendienteAbierto extends Notifier<bool> {
+  bool _decidido = false;
+  bool _vivo = true;
+
+  @override
+  bool build() {
+    ref.onDispose(() => _vivo = false);
+    _cargar();
+    return true;
+  }
+
+  Future<void> _cargar() async {
+    final prefs = await Preferencias.abrir();
+    if (!_vivo || _decidido) return;
+    final guardado = prefs.banderaOpcional(clavePendienteAbierto);
+    if (guardado != null && guardado != state) state = guardado;
+  }
+
+  Future<void> alternar() async {
+    _decidido = true;
+    state = !state;
+    final prefs = await Preferencias.abrir();
+    await prefs.guardarBandera(clavePendienteAbierto, state);
+  }
+}
+
+final pendienteAbiertoProvider = NotifierProvider<PendienteAbierto, bool>(PendienteAbierto.new);
+
 /// El tema: `null` sigue al sistema, `true` oscuro, `false` claro.
 ///
 /// Arranca siguiendo al teléfono —el usuario ya eligió una vez en sus ajustes y

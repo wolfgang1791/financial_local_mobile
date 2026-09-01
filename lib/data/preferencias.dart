@@ -87,6 +87,9 @@ class Preferencias {
 /// Las subcategorías marcadas en el calendario de días.
 const claveMarcasDelCalendario = 'panorama.marcasDelCalendario';
 
+/// Si la tarjeta de lo que falta por pagar está desplegada.
+const clavePendienteAbierto = 'panorama.pendiente';
+
 /// Si las cifras de la tarjeta están tapadas.
 const claveSaldosOcultos = 'saldos.ocultos';
 

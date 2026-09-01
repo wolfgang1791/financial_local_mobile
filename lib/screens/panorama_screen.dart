@@ -1695,6 +1695,16 @@ class _PorPagarEsteMes extends ConsumerWidget {
     final disponible = posicion?.total ?? 0;
     final queda = ((disponible - p.total) * 100).round() / 100;
 
+    // Plegable, y recordado entre visitas. Es la tarjeta más alta de la pantalla
+    // y hay meses en que ya sabes lo que dice y solo estorba para llegar a lo de
+    // abajo.
+    //
+    // Lo que **no** se pliega es la cifra: plegada sube al lado del título.
+    // Esconder el número dejaría un rótulo que promete una respuesta y no la da,
+    // y para taparlo de una mirada ajena ya está el ojo de la tarjeta de arriba,
+    // que es otro problema. Acá se pliega el detalle, no el dato.
+    final abierto = ref.watch(pendienteAbiertoProvider);
+
     Widget linea(String rotulo, String detalle, double monto) => Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Row(
@@ -1724,51 +1734,67 @@ class _PorPagarEsteMes extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'TE FALTA PAGAR ESTE MES',
-                  style: AppText.kicker(colors.oliveInk.withValues(alpha: 0.55)),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => ref.read(pendienteAbiertoProvider.notifier).alternar(),
+            child: Row(
+              children: [
+                AppIcon(
+                  abierto ? AppIconData.chevronDown : AppIconData.chevronRight,
+                  size: 13,
+                  color: colors.oliveInk.withValues(alpha: 0.55),
                 ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    'TE FALTA PAGAR ESTE MES',
+                    style: AppText.kicker(colors.oliveInk.withValues(alpha: 0.55)),
+                  ),
+                ),
+                Text(
+                  abierto
+                      ? 'de ${Money.format(p.comprometido, currency)}'
+                      : Money.format(p.total, currency),
+                  style: abierto
+                      ? AppText.tiny(colors.oliveInk.withValues(alpha: 0.5))
+                      : AppText.money(colors.foreground, size: 14, weight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+          if (abierto) ...[
+            const SizedBox(height: 6),
+            Text(
+              Money.format(p.total, currency),
+              style: AppText.money(colors.foreground, size: 26, weight: FontWeight.w600),
+            ),
+            const SizedBox(height: Spacing.sm),
+            if (p.fijosCuantos > 0) linea('Gastos fijos', '${p.fijosCuantos} sin marcar', p.fijos),
+            if (p.deudasCuantas > 0)
+              linea(
+                'Cuotas de deuda',
+                '${p.deudasCuantas} ${p.deudasCuantas == 1 ? "pendiente" : "pendientes"}',
+                p.deudas,
               ),
+            const SizedBox(height: Spacing.sm),
+            Text(
+              queda >= 0
+                  ? 'Con tu patrimonio de hoy (${Money.format(disponible, currency)}) te quedarían '
+                        '${Money.format(queda, currency)} después de pagarlo.'
+                  : 'Tu patrimonio de hoy es ${Money.format(disponible, currency)}: faltarían '
+                        '${Money.format(-queda, currency)} para cubrirlo todo.',
+              style: AppText.tiny(
+                queda >= 0 ? colors.oliveInk.withValues(alpha: 0.7) : colors.danger,
+              ),
+            ),
+            if (p.sinCotizacion.isNotEmpty) ...[
+              const SizedBox(height: 4),
               Text(
-                'de ${Money.format(p.comprometido, currency)}',
-                style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.5)),
+                'Sin tipo de cambio para ${p.sinCotizacion.join(", ")} → $currency: esas cuotas '
+                'quedan fuera del total.',
+                style: AppText.tiny(colors.danger),
               ),
             ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            Money.format(p.total, currency),
-            style: AppText.money(colors.foreground, size: 26, weight: FontWeight.w600),
-          ),
-          const SizedBox(height: Spacing.sm),
-          if (p.fijosCuantos > 0) linea('Gastos fijos', '${p.fijosCuantos} sin marcar', p.fijos),
-          if (p.deudasCuantas > 0)
-            linea(
-              'Cuotas de deuda',
-              '${p.deudasCuantas} ${p.deudasCuantas == 1 ? "pendiente" : "pendientes"}',
-              p.deudas,
-            ),
-          const SizedBox(height: Spacing.sm),
-          Text(
-            queda >= 0
-                ? 'Con tu patrimonio de hoy (${Money.format(disponible, currency)}) te quedarían '
-                      '${Money.format(queda, currency)} después de pagarlo.'
-                : 'Tu patrimonio de hoy es ${Money.format(disponible, currency)}: faltarían '
-                      '${Money.format(-queda, currency)} para cubrirlo todo.',
-            style: AppText.tiny(
-              queda >= 0 ? colors.oliveInk.withValues(alpha: 0.7) : colors.danger,
-            ),
-          ),
-          if (p.sinCotizacion.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Sin tipo de cambio para ${p.sinCotizacion.join(", ")} → $currency: esas cuotas '
-              'quedan fuera del total.',
-              style: AppText.tiny(colors.danger),
-            ),
           ],
         ],
       ),
