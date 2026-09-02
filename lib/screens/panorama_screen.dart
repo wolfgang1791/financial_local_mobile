@@ -1333,9 +1333,17 @@ class _GastoEnElTiempoState extends ConsumerState<_GastoEnElTiempo> {
     // Con un solo mes no hay tendencia que mostrar, así que ni se ofrece la
     // escala: un conmutador que lleva a una tarjeta vacía es peor que no tenerlo.
     final hayMeses = serie.length > 1;
-    final porDia = _porDia || !hayMeses;
+    // Los días necesitan al menos dos para decir algo. Cuando no los hay —el día
+    // 1 de cada mes— la tarjeta cae a la escala mensual en vez de desaparecer:
+    // esconderla se llevaba también el conmutador, así que se perdía el acceso a
+    // los meses, que sí tenían qué contar.
+    // Se arma una sola vez: `_dias` mira los providers y montarlo dos veces solo
+    // para preguntarle si existe es trabajo repetido.
+    final dias = _dias(context);
+    final hayDias = dias != null;
+    final porDia = hayDias && (_porDia || !hayMeses);
 
-    final cuerpo = porDia ? _dias(context) : _meses(context, serie);
+    final cuerpo = porDia ? dias : (hayMeses ? _meses(context, serie) : null);
     if (cuerpo == null) return const SizedBox.shrink();
 
     return Padding(
@@ -1347,7 +1355,7 @@ class _GastoEnElTiempoState extends ConsumerState<_GastoEnElTiempo> {
             SectionHeader(
               kicker: 'Cuándo se te fue',
               title: porDia ? 'Los días del periodo' : 'Mes a mes',
-              trailing: hayMeses
+              trailing: hayMeses && hayDias
                   ? _Alternador(
                       opciones: const ['Días', 'Meses'],
                       indice: porDia ? 0 : 1,

@@ -185,10 +185,14 @@ class _SpendingDaysChartState extends State<SpendingDaysChart> {
   Widget build(BuildContext context) {
     final colors = AppTheme.of(context);
     final vista = _vista;
-    // Un periodo de dos días no tiene patrón que mostrar; la frase de arriba ya
-    // lo dice todo.
-    if (vista.days.length < 3) return const SizedBox.shrink();
-
+    // Acá no se decide si esto se ve: lo decide la tarjeta que lo contiene, que
+    // es la que sabe si hay otra escala a la que caer.
+    //
+    // Había un corte propio en tres días mientras la tarjeta cortaba en dos, así
+    // que con un periodo de exactamente dos —los primeros días de cada mes— la
+    // tarjeta se dibujaba con su título y su descripción y el calendario salía
+    // vacío. Dos guards para la misma decisión, con números distintos y en
+    // archivos distintos, es cómo se llega a una tarjeta que no muestra nada.
     final total = vista.days.length;
     final calendario = total <= _maximoCalendario;
 
