@@ -122,4 +122,60 @@ void main() {
       throwsA(isA<ApiException>()),
     );
   });
+  test('borrar un flujo con pagos lo archiva: la plata de los meses anteriores se queda', () async {
+    // Borrar un flujo no puede borrar plata. Los meses que ya se marcaron
+    // movieron el saldo de verdad, y sus asientos son lo que explica el
+    // patrimonio de hoy: si se fueran con el flujo, la curva quedaría con un
+    // agujero sin causa visible.
+    final lista = (await api.get('/recurring-flows') as List).cast<Map<String, dynamic>>();
+    final conPagos = lista.firstWhere((f) => (f['paidMonths'] as List).isNotEmpty);
+    final id = conPagos['id'] as String;
+
+    final antesDelPatrimonio =
+        ((await api.get('/financial-engine/cash-position') as Map)['total'] as num).toDouble();
+    final asientosAntes = ((await api.get('/transactions?take=500') as Map)['items'] as List)
+        .where((t) => (t as Map)['recurringFlowId'] == id)
+        .length;
+    expect(asientosAntes, greaterThan(0));
+
+    final r = await api.delete('/recurring-flows/$id') as Map;
+    // Archivado, no borrado: es la diferencia entre "esto ya no aplica de aquí
+    // en adelante" y "esto nunca pasó".
+    expect(r['archived'], true);
+
+    // Desaparece de la lista viva...
+    final despues = (await api.get('/recurring-flows') as List).cast<Map<String, dynamic>>();
+    expect(despues.map((f) => f['id']), isNot(contains(id)));
+
+    // ...pero sus movimientos y el patrimonio no se mueven.
+    final asientosDespues = ((await api.get('/transactions?take=500') as Map)['items'] as List)
+        .where((t) => (t as Map)['recurringFlowId'] == id)
+        .length;
+    expect(asientosDespues, asientosAntes);
+    expect(
+      ((await api.get('/financial-engine/cash-position') as Map)['total'] as num).toDouble(),
+      closeTo(antesDelPatrimonio, 0.01),
+    );
+  });
+
+  test('los meses anteriores siguen contando como gasto fijo', () async {
+    // El historial reparte por `origen`, y "fijos" son los que llevan
+    // `recurringFlowId`. Ese id sobrevive al archivado —la fila del flujo sigue
+    // ahí— así que julio se sigue leyendo igual después de borrar. Si el flujo
+    // se hubiera borrado de verdad, el id quedaría en null y esos pagos se
+    // mudarían solos al cajón de "gastos de la vida".
+    final lista = (await api.get('/recurring-flows') as List).cast<Map<String, dynamic>>();
+    final conPagos = lista.firstWhere(
+      (f) => (f['paidMonths'] as List).isNotEmpty && f['type'] == 'EXPENSE',
+    );
+
+    Future<double> fijosDeSiempre() async =>
+        (((await api.get('/transactions?take=500&origen=fijos') as Map)['totals'] as Map)['expense']
+                as num)
+            .toDouble();
+
+    final antes = await fijosDeSiempre();
+    await api.delete('/recurring-flows/${conPagos['id']}');
+    expect(await fijosDeSiempre(), closeTo(antes, 0.01));
+  });
 }
