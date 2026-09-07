@@ -21,6 +21,7 @@ import '../ui/modal.dart';
 import '../ui/spending_days_chart.dart';
 import '../ui/net_worth_chart.dart';
 import '../ui/refreshable_screen.dart';
+import '../ui/todo_oculto.dart';
 import '../ui/surface.dart';
 import 'shell.dart';
 
@@ -305,7 +306,12 @@ class _PanoramaScreenState extends ConsumerState<PanoramaScreen> {
         posicion.when(
           loading: () => const _Esqueleto(alto: 118),
           error: (_, __) => const _NoCargo(),
-          data: (p) => _TarjetaSaldo(posicion: p, currency: user.currency),
+          // Con todo oculto no hay patrimonio ni movimientos que resumir, y la
+          // pantalla se apagaba sin decir por qué. Se distingue de estar de
+          // verdad vacío.
+          data: (p) => p.accounts.isNotEmpty && p.accounts.every((c) => c.isHidden)
+              ? TodoOculto(cuantas: p.accounts.length)
+              : _TarjetaSaldo(posicion: p, currency: user.currency),
         ),
         // El bloque de arriba es uno solo, no tres tarjetas sueltas: "cuánto
         // tengo", "cuánto me falta pagar" y "cómo viene la deuda" son una sola
@@ -1620,7 +1626,8 @@ class _CuentasDeLaCurva extends StatelessWidget {
           // implementación de una promesa que ya se entendió.
           Text(
             'La curva dibuja ${Money.format(total, currency)} de ${dentro.length} '
-            '${dentro.length == 1 ? "cuenta" : "cuentas"} · solo cambia el gráfico.',
+            '${dentro.length == 1 ? "cuenta" : "cuentas"} · solo cambia el gráfico, '
+            'no se guarda.',
             style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.55)),
           ),
         ],

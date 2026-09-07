@@ -438,7 +438,7 @@ abstract final class LocalDatabase {
         'INSERT OR IGNORE INTO "Transaction" '
         '(id, accountId, type, kind, amount, occurredAt, createdAt, description) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, cuentaId, tipo, 'ADJUSTMENT', 2750, ms, ms, texto],
+        [id, cuentaId, tipo, 'ADJUSTMENT', _colchonDeJulio, ms, ms, texto],
       );
     }
 
@@ -451,10 +451,38 @@ abstract final class LocalDatabase {
     await poner(
       'colchon-cierre-2026-07-30',
       'EXPENSE',
-      DateTime.utc(2026, 7, 30, 17),
+      DateTime.utc(2026, 7, 31, 17),
       'Cierre del efectivo inicial',
     );
+
+    // Y se ponen al día las que ya existían con los valores viejos.
+    //
+    // La primera versión ponía 2,750 y cerraba el 30 de julio, "el primer día
+    // que ya estaba en positivo". Funcionó con los datos de entonces; después se
+    // registraron más movimientos en julio —la cuota de la deuda en dólares del
+    // día 30, entre otros— y ese día dejó de estarlo. El cierre pasó a caer
+    // sobre un día ya hundido y abrió un pozo de -3,787.13, peor que el problema
+    // original.
+    //
+    // La lección es que la fecha de cierre no se puede escribir a mano contra
+    // una foto de los datos. Los valores nuevos salen de la regla: el colchón
+    // vale lo que hizo falta de verdad —3,787.13, redondeado a 3,800 para no
+    // dejar el peor día clavado en cero exacto— y el cierre se muda al 31, el
+    // primer día en que la curva ya se sostiene sola.
+    await db.rawUpdate('UPDATE "Transaction" SET amount = ? WHERE id IN (?, ?)', [
+      _colchonDeJulio,
+      'colchon-inicial-2026-07-02',
+      'colchon-cierre-2026-07-30',
+    ]);
+    await db.rawUpdate('UPDATE "Transaction" SET occurredAt = ? WHERE id = ?', [
+      DateTime.utc(2026, 7, 31, 17).millisecondsSinceEpoch,
+      'colchon-cierre-2026-07-30',
+    ]);
   }
+
+  /// Cuánto efectivo había al empezar, que la app nunca supo. Ver
+  /// `_asegurarElColchonDeJulio`.
+  static const _colchonDeJulio = 3800;
 
   /// Los pagos que quedaron fechados en el futuro vuelven al día en que se
   /// marcaron.

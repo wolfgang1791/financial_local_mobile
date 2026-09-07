@@ -10,6 +10,9 @@ import '../local_api_router.dart';
 
 const _uuid = Uuid();
 const _columnasBooleanas = {'isArchived', 'isHidden'};
+
+/// Las que forman el patrimonio. Misma lista que el motor financiero.
+const _tiposLiquidos = {'CHECKING', 'SAVINGS', 'CASH'};
 const _columnasFecha = {'createdAt', 'updatedAt'};
 const _adjustmentDetail = 'AJUSTE FUERA DE FINANCIAL';
 
@@ -111,7 +114,35 @@ void registerAccountsRoutes() {
     for (final campo in ['name', 'type', 'institution', 'currency']) {
       if (datos.containsKey(campo)) cambios[campo] = datos[campo];
     }
-    if (datos.containsKey('isHidden')) cambios['isHidden'] = (datos['isHidden'] as bool) ? 1 : 0;
+    if (datos.containsKey('isHidden')) {
+      final ocultar = datos['isHidden'] as bool;
+      // No se puede ocultar la última cuenta que cuenta.
+      //
+      // Quedarse sin patrimonio no es un estado que nadie elija a propósito, y
+      // la app entera se apaga con él: el patrimonio queda en cero, los hitos no
+      // tienen de dónde salir, y **los movimientos desaparecen de todas las
+      // listas** —el historial filtra por cuentas que cuentan— así que Panorama
+      // contesta "sin registros todavía" con todo guardado. Pasó de verdad, y
+      // desde la app no había forma de entender por qué.
+      //
+      // El candado va acá y no solo en la pantalla: es la única forma de que
+      // valga igual venga de donde venga la llamada.
+      if (ocultar && (existente.first['isHidden'] as int? ?? 0) == 0) {
+        final marcas = List.filled(_tiposLiquidos.length, '?').join(',');
+        final quedan = await db.rawQuery(
+          'SELECT COUNT(*) AS n FROM Account '
+          'WHERE userId = ? AND isArchived = 0 AND isHidden = 0 AND type IN ($marcas)',
+          [userId, ..._tiposLiquidos],
+        );
+        if ((quedan.first['n'] as num).toInt() <= 1) {
+          throw const ApiException(
+            'Es la única cuenta que cuenta en tu patrimonio. Si la ocultas no queda '
+            'ninguna, y todos tus movimientos dejarían de verse.',
+          );
+        }
+      }
+      cambios['isHidden'] = ocultar ? 1 : 0;
+    }
 
     await db.update('Account', cambios, where: 'id = ?', whereArgs: [id]);
     final fila = (await db.query('Account', where: 'id = ?', whereArgs: [id])).first;

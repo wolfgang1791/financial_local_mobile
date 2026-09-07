@@ -19,6 +19,7 @@ import '../ui/format.dart';
 import '../ui/icons.dart';
 import '../ui/modal.dart';
 import '../ui/refreshable_screen.dart';
+import '../ui/todo_oculto.dart';
 import '../ui/surface.dart';
 import 'edit_transaction_modal.dart';
 import 'shell.dart';
@@ -812,6 +813,9 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
     final colors = AppTheme.of(context);
     final user = ref.watch(userProvider);
     final posicion = ref.watch(cashPositionProvider);
+    final cuentasDelUsuario = posicion.valueOrNull?.accounts ?? const <CashPositionAccount>[];
+    final todoOculto = cuentasDelUsuario.isNotEmpty && cuentasDelUsuario.every((c) => c.isHidden);
+
     // Con una sola cuenta el nombre no aporta: sería la misma palabra en cada
     // fila. Con dos es lo que uno viene a comprobar.
     final variasCuentas = (ref.watch(accountsProvider).valueOrNull ?? const []).length > 1;
@@ -1173,6 +1177,12 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
           )
         else if (_error != null)
           AppCard(dashed: true, child: Text(_error!, style: AppText.small(colors.danger)))
+        // Ninguna cuenta cuenta: el historial filtra por las que cuentan, así
+        // que la lista sale vacía por un interruptor y no por los filtros de
+        // arriba. Decir "no hay con estos filtros" mandaba a revisar unos
+        // filtros que no tienen nada que ver.
+        else if (_items.isEmpty && todoOculto)
+          TodoOculto(cuantas: posicion.valueOrNull!.accounts.length)
         else if (_items.isEmpty)
           AppCard(
             dashed: true,

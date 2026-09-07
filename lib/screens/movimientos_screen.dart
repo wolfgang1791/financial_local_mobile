@@ -237,6 +237,18 @@ class _TarjetaPatrimonio extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: Spacing.md),
+        // El rótulo existe porque hay **otra** fila de chips de cuentas en la
+        // app —la de la curva de patrimonio— que se ve casi igual y no guarda
+        // nada. Confundirlas costó caro: quedaron todas las cuentas ocultas, el
+        // patrimonio en cero y el historial vacío, sin nada que dijera por qué.
+        // Cada fila dice ahora lo que hace.
+        Builder(
+          builder: (context) => Text(
+            'QUÉ CUENTAS SUMAN A TU PATRIMONIO · SE GUARDA',
+            style: AppText.kicker(AppTheme.of(context).oliveInk.withValues(alpha: 0.5)),
+          ),
+        ),
+        const SizedBox(height: 6),
         Wrap(
           spacing: Spacing.sm,
           runSpacing: Spacing.sm,
@@ -288,6 +300,12 @@ class _ChipCuenta extends ConsumerWidget {
 
   Future<void> _abrirAcciones(BuildContext context, WidgetRef ref) async {
     final colors = AppTheme.of(context);
+    // La única que sigue contando. Quedarse sin ninguna es el estado del que no
+    // se sale sin saber que este menú existe.
+    final cuentan = (ref.read(cashPositionProvider).valueOrNull?.accounts ?? const [])
+        .where((c) => !c.isHidden)
+        .length;
+    final esLaUltima = !cuenta.isHidden && cuentan <= 1;
     final accion = await showAppModal<String>(
       context,
       title: cuenta.name,
@@ -318,9 +336,15 @@ class _ChipCuenta extends ConsumerWidget {
             subtitulo: 'Cuando el banco dice otra cosa',
             onTap: () => Navigator.of(context).pop('saldo'),
           ),
+          // La última que cuenta no se puede ocultar: sin ninguna, el patrimonio
+          // va a cero y **los movimientos desaparecen de todas las listas** —el
+          // historial filtra por cuentas que cuentan— así que la app entera se
+          // apaga sin decir por qué. El motor lo rechaza igual; acá se dice
+          // antes, en vez de dejar tocar algo que va a fallar.
           FieldOption(
             titulo: cuenta.isHidden ? 'Mostrar cuenta' : 'Ocultar cuenta del patrimonio',
-            onTap: () => Navigator.of(context).pop('ocultar'),
+            subtitulo: esLaUltima ? 'Es la única que cuenta: sin ella no se vería nada' : null,
+            onTap: esLaUltima ? () {} : () => Navigator.of(context).pop('ocultar'),
           ),
           GestureDetector(
             behavior: HitTestBehavior.opaque,
