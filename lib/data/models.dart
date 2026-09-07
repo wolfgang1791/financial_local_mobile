@@ -836,3 +836,20 @@ class AccountDeletionImpact {
 
   bool get bloqueada => blockedBy != null;
 }
+
+/// Cómo se nombra una cuenta en un selector.
+///
+/// Una cuenta oculta no entra en el patrimonio: registrar ahí le sube el saldo y
+/// deja el patrimonio igual. No es un error —la ocultaste tú— pero sin decirlo
+/// se lee como que la app perdió la plata.
+///
+/// Se listan igual, no se esconden: a veces el dinero entra ahí de verdad, y un
+/// selector que no ofrece una de tus cuentas es un callejón sin salida. Lo que
+/// se arregla es la sorpresa, no la opción.
+extension EtiquetaDeCuenta on Account {
+  /// El aviso para el subtítulo de una opción, o `null` si la cuenta cuenta.
+  String? get avisoDePatrimonio => isHidden ? 'Oculta · no cuenta en tu patrimonio' : null;
+
+  /// El nombre para un campo ya elegido, con el aviso pegado si hace falta.
+  String get nombreConAviso => isHidden ? '$name · no cuenta en tu patrimonio' : name;
+}

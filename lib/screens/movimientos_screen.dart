@@ -774,11 +774,7 @@ class _FormularioMontoState extends State<_FormularioMonto> {
           const SizedBox(height: Spacing.lg),
           const FieldLabel('Cuenta destino'),
           FieldSelector(
-            texto: cuenta == null
-                ? 'Elige una'
-                : cuenta.isHidden
-                ? '${cuenta.name} · no cuenta en tu patrimonio'
-                : cuenta.name,
+            texto: cuenta?.nombreConAviso ?? 'Elige una',
             onTap: () async {
               final elegida = await showAppModal<Account>(
                 context,
@@ -798,7 +794,7 @@ class _FormularioMontoState extends State<_FormularioMonto> {
                       FieldOption(
                         titulo: c.name,
                         detalle: Money.format(c.balance, c.currency),
-                        subtitulo: c.isHidden ? 'Oculta · no cuenta en tu patrimonio' : null,
+                        subtitulo: c.avisoDePatrimonio,
                         seleccionado: c.id == _cuentaId,
                         onTap: () => Navigator.of(context).pop(c),
                       ),

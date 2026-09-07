@@ -393,7 +393,7 @@ class _FormularioFlujoState extends ConsumerState<_FormularioFlujo> {
         if (cuentas.length > 1) ...[
           const FieldLabel('Cuenta'),
           FieldSelector(
-            texto: cuenta?.name ?? 'Elige una',
+            texto: cuenta?.nombreConAviso ?? 'Elige una',
             onTap: () async {
               final elegida = await showAppModal<Account>(
                 context,
@@ -403,7 +403,11 @@ class _FormularioFlujoState extends ConsumerState<_FormularioFlujo> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     for (final c in cuentas)
-                      FieldOption(titulo: c.name, onTap: () => Navigator.of(context).pop(c)),
+                      FieldOption(
+                        titulo: c.name,
+                        subtitulo: c.avisoDePatrimonio,
+                        onTap: () => Navigator.of(context).pop(c),
+                      ),
                   ],
                 ),
               );

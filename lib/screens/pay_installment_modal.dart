@@ -184,6 +184,7 @@ class _FormularioPagoState extends ConsumerState<_FormularioPago> {
                   for (final c in cuentas)
                     FieldOption(
                       titulo: c.name,
+                      subtitulo: c.avisoDePatrimonio,
                       detalle: Money.format(c.balance, c.currency),
                       onTap: () => Navigator.of(context).pop(c),
                     ),

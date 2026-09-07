@@ -244,7 +244,7 @@ class _FormularioState extends ConsumerState<_Formulario> {
         if (cuentas.length > 1) ...[
           FieldLabel(esTransferencia ? 'Desde' : 'Cuenta'),
           FieldSelector(
-            texto: cuenta?.name ?? 'Elige una',
+            texto: cuenta?.nombreConAviso ?? 'Elige una',
             onTap: () async {
               final elegida = await showAppModal<Account>(
                 context,
@@ -257,6 +257,7 @@ class _FormularioState extends ConsumerState<_Formulario> {
                       FieldOption(
                         titulo: c.name,
                         detalle: tapar(Money.format(c.balance, c.currency), ocultos),
+                        subtitulo: c.avisoDePatrimonio,
                         onTap: () => Navigator.of(context).pop(c),
                       ),
                   ],
@@ -312,6 +313,7 @@ class _FormularioState extends ConsumerState<_Formulario> {
                             FieldOption(
                               titulo: c.name,
                               detalle: tapar(Money.format(c.balance, c.currency), ocultos),
+                              subtitulo: c.avisoDePatrimonio,
                               onTap: () => Navigator.of(context).pop(c),
                             ),
                         ],
