@@ -757,17 +757,22 @@ class _FormularioMontoState extends State<_FormularioMonto> {
           'Solo para este mes. Los otros meses no cambian.',
           style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.65)),
         ),
-        // De qué cuenta sale, o a cuál entra.
+        // A qué cuenta entra. Solo en los ingresos, y solo con más de una.
         //
         // El motor ya aceptaba otra cuenta al marcar; lo que faltaba era
         // preguntarlo. Sin esto el cobro caía siempre en la cuenta declarada del
-        // flujo, aunque este mes hubiera entrado en otra — y si el flujo no
-        // tenía ninguna, no había forma de marcarlo.
+        // flujo, aunque este mes hubiera entrado en otra.
         //
-        // Solo con más de una cuenta: con una sola no hay nada que elegir.
-        if (widget.cuentas.length > 1) ...[
+        // Un gasto fijo no lo lleva: el alquiler sale siempre de donde sale, así
+        // que preguntarlo cada mes es un control que nunca se toca ocupando
+        // sitio en el formulario. Un ingreso es al revés — el sueldo puede caer
+        // en una cuenta este mes y en otra el siguiente, y es justo lo que hay
+        // que poder decir.
+        //
+        // Con una sola cuenta tampoco: no hay nada que elegir.
+        if (!widget.esGasto && widget.cuentas.length > 1) ...[
           const SizedBox(height: Spacing.lg),
-          FieldLabel(widget.esGasto ? 'Cuenta de pago' : 'Cuenta destino'),
+          const FieldLabel('Cuenta destino'),
           FieldSelector(
             texto: cuenta == null
                 ? 'Elige una'
@@ -777,7 +782,7 @@ class _FormularioMontoState extends State<_FormularioMonto> {
             onTap: () async {
               final elegida = await showAppModal<Account>(
                 context,
-                title: widget.esGasto ? '¿De qué cuenta salió?' : '¿A qué cuenta entró?',
+                title: '¿A qué cuenta entró?',
                 builder: (context) => Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
