@@ -82,4 +82,37 @@ void main() {
       );
     }
   });
+  test('el ingreso se fecha el día en que lo marcas, no en su mes', () async {
+    // La plata entró hoy aunque el sueldo sea de agosto. Fecharlo en agosto
+    // mientras el saldo se mueve hoy hace que la curva de patrimonio —que se
+    // reconstruye hacia atrás desde el saldo actual— muestre esa plata como si
+    // hubiera estado ahí desde entonces.
+    final flujo = await crearFlujo(ingreso: true);
+    final r =
+        await api.post('/recurring-flows/${flujo['id']}/pay', {'month': mesPasado, 'amount': 400})
+            as Map<String, dynamic>;
+
+    final items = ((await api.get('/transactions?take=500') as Map)['items'] as List)
+        .cast<Map<String, dynamic>>();
+    final asiento = items.firstWhere((t) => t['id'] == r['transactionId']);
+    final fecha = DateTime.parse(asiento['occurredAt'] as String).toLocal();
+    final hoy = DateTime.now();
+    expect(fecha.year, hoy.year);
+    expect(fecha.month, hoy.month);
+    expect(fecha.day, hoy.day);
+  });
+
+  test('el gasto sigue fechándose dentro de su mes', () async {
+    // Al revés que el ingreso, y por lo mismo: el alquiler de agosto salió de la
+    // cuenta en agosto. Fecharlo hoy le cambiaría el gasto a los dos meses.
+    final flujo = await crearFlujo(ingreso: false);
+    final r =
+        await api.post('/recurring-flows/${flujo['id']}/pay', {'month': mesPasado, 'amount': 400})
+            as Map<String, dynamic>;
+
+    final items = ((await api.get('/transactions?take=500') as Map)['items'] as List)
+        .cast<Map<String, dynamic>>();
+    final asiento = items.firstWhere((t) => t['id'] == r['transactionId']);
+    expect((asiento['occurredAt'] as String).substring(0, 7), mesPasado);
+  });
 }

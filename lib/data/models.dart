@@ -348,12 +348,17 @@ class RecurringFlow {
     required this.paidMonths,
     required this.monthlyRecords,
     this.months = const {},
+    this.isActive = true,
     required this.categoryName,
     required this.accountId,
   });
 
   factory RecurringFlow.fromJson(Map<String, dynamic> j) => RecurringFlow(
     id: j['id'] as String,
+    // Archivado: borraste el flujo pero tenía pagos, así que se conserva por su
+    // historia. Sigue en la lista para que sus meses anteriores no desaparezcan,
+    // y sin botón de marcar — no se sigue registrando algo ya terminado.
+    isActive: (j['isActive'] as bool?) ?? true,
     name: (j['name'] as String?) ?? '',
     type: (j['type'] as String?) ?? 'EXPENSE',
     amount: _num(j['amount']),
@@ -410,6 +415,10 @@ class RecurringFlow {
   /// los meses ni el sueldo es el mismo todo el año. [amount] queda como la
   /// semilla del primero.
   final Map<String, FlowMonth> months;
+
+  /// Si sigue vivo. Un archivado se muestra por su historia y no se puede
+  /// marcar.
+  final bool isActive;
 
   /// Si ese mes está marcado como pagado o cobrado.
   ///

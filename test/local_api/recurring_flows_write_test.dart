@@ -143,9 +143,13 @@ void main() {
     // en adelante" y "esto nunca pasó".
     expect(r['archived'], true);
 
-    // Desaparece de la lista viva...
+    // Sigue en la lista, marcado como archivado: sus meses anteriores tienen
+    // que poder verse. Sacarlo del todo hacía que julio dejara de mostrar el
+    // sueldo que sí se cobró en julio.
     final despues = (await api.get('/recurring-flows') as List).cast<Map<String, dynamic>>();
-    expect(despues.map((f) => f['id']), isNot(contains(id)));
+    final archivado = despues.firstWhere((f) => f['id'] == id);
+    expect(archivado['isActive'], false);
+    expect(archivado['paidMonths'], isNotEmpty);
 
     // ...pero sus movimientos y el patrimonio no se mueven.
     final asientosDespues = ((await api.get('/transactions?take=500') as Map)['items'] as List)

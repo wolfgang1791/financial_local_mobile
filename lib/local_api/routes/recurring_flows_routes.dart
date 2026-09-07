@@ -28,11 +28,24 @@ void registerRecurringFlowsRoutes() {
     final clock = await UserClock.forUser(db, userId);
     final now = clock.now();
 
-    final flujos = await db.query(
-      'RecurringFlow',
-      where: 'userId = ? AND isActive = 1',
-      whereArgs: [userId],
-      orderBy: 'nextDueDate ASC, name ASC',
+    // Los vivos, más los archivados que dejaron rastro.
+    //
+    // Borrar un flujo con pagos lo archiva en vez de borrarlo —esa plata salió
+    // de la cuenta de verdad— pero la lista los descartaba a todos, así que el
+    // flujo desaparecía **con sus meses anteriores**: julio dejaba de mostrar
+    // el sueldo que sí se cobró en julio. Una suscripción que cancelaste en mayo
+    // es parte de por qué los meses anteriores se ven como se ven.
+    //
+    // No aparecen en los meses donde no dejaron nada: la pantalla ya filtra por
+    // mes con las fichas, y a los archivados no se les completa el mes en curso
+    // —abajo— así que no vuelven a salir como pendientes de hoy.
+    final flujos = await db.rawQuery(
+      'SELECT f.* FROM RecurringFlow f '
+      'WHERE f.userId = ? AND (f.isActive = 1 OR EXISTS ('
+      '  SELECT 1 FROM "Transaction" t WHERE t.recurringFlowId = f.id'
+      ')) '
+      'ORDER BY f.nextDueDate ASC, f.name ASC',
+      [userId],
     );
     if (flujos.isEmpty) return <Map<String, dynamic>>[];
 
@@ -44,6 +57,27 @@ void registerRecurringFlowsRoutes() {
       ids,
     );
 
+    // Las fichas de cada flujo, para atribuir cada pago a su mes.
+    //
+    // **A la ficha, no a su fecha.** `paidAt` guarda el mismo instante que lleva
+    // el asiento, así que la pareja es exacta; y la ficha es la única que sabe
+    // de qué mes se estaba hablando al marcarlo.
+    //
+    // La fecha ya no lo dice, y hace rato: la ficha de agosto de "Luz" puede
+    // vencer el 1 de septiembre, y un ingreso se fecha el día en que entra
+    // aunque corresponda a otro mes. Deducirlo de `occurredAt` mandaba esos
+    // pagos al mes equivocado — el suyo quedaba sin registro y volvía a salir
+    // como pendiente.
+    final fichas = await db.query(
+      'RecurringFlowMonth',
+      columns: ['recurringFlowId', 'month', 'paidAt'],
+      where: 'recurringFlowId IN ($placeholders) AND paidAt IS NOT NULL',
+      whereArgs: ids,
+    );
+    final mesPorMarca = <String, String>{
+      for (final f in fichas) '${f['recurringFlowId']}|${f['paidAt']}': f['month'] as String,
+    };
+
     final mesesPorFlujo = <String, Set<String>>{};
     // Qué se registró en cada mes: monto y movimiento. El `amount` del flujo es
     // la expectativa; lo que pasó cada mes puede diferir —la luz nunca es la
@@ -54,7 +88,9 @@ void registerRecurringFlowsRoutes() {
     for (final pago in pagos) {
       final id = pago['recurringFlowId'] as String;
       final ocurrio = DateTime.fromMillisecondsSinceEpoch(pago['occurredAt'] as int, isUtc: true);
-      final mes = clock.monthKey(ocurrio);
+      // Sin ficha se cae en el mes de la fecha: son los pagos anteriores a que
+      // las fichas existieran, y ahí la fecha sí era la única pista.
+      final mes = mesPorMarca['$id|${pago['occurredAt']}'] ?? clock.monthKey(ocurrio);
       (mesesPorFlujo[id] ??= {}).add(mes);
       (registrosPorFlujo[id] ??= {})[mes] = {
         'month': mes,
@@ -76,7 +112,18 @@ void registerRecurringFlowsRoutes() {
       //
       // Va antes de lo derivado porque de estas fichas sale qué meses están
       // registrados, y de ahí salen los meses que faltan y el estado del mes.
-      final mesesCompletos = await _completarMeses(db, flujo, clock, now);
+      // A los archivados no se les crea el mes en curso: dejaron de aplicar, y
+      // hacerles nacer septiembre los devolvería a la lista de pendientes de hoy
+      // como si nada hubiera pasado.
+      final activo = (flujo['isActive'] as int? ?? 1) == 1;
+      final mesesCompletos = activo
+          ? await _completarMeses(db, flujo, clock, now)
+          : await db.query(
+              'RecurringFlowMonth',
+              where: 'recurringFlowId = ?',
+              whereArgs: [id],
+              orderBy: 'month ASC',
+            );
       final registrados = mesesRegistrados(mesesCompletos, mesesPorFlujo[id] ?? const {});
 
       final derivado = decorateRecurringFlow(
@@ -297,6 +344,7 @@ void registerRecurringFlowsRoutes() {
         (datos['amount'] as num?)?.toDouble() ??
         (filaMes?['amount'] as num?)?.toDouble() ??
         (flujo['amount'] as num).toDouble();
+    final type = flujo['type'] as String;
     // Cuándo ocurrió el pago: **cuando lo marcaste**.
     //
     // El vencimiento es una referencia —"esto toca el 5"— y no la fecha del
@@ -304,14 +352,23 @@ void registerRecurringFlowsRoutes() {
     // "Luz" vencía el 1 de septiembre, y marcarla hoy registraba una salida de
     // plata que todavía no ha pasado.
     //
-    // La excepción es marcar un mes que ya cerró: ahí "ahora" cae fuera de ese
-    // mes, y un pago de julio fechado en agosto le cambiaría el gasto a los dos
-    // meses. Se usa su vencimiento si cae dentro, y su último día si no —que es
-    // lo más tarde que ese mes pudo pagarse.
+    // La excepción es marcar un **gasto** de un mes que ya cerró: ahí "ahora"
+    // cae fuera de ese mes, y un pago de julio fechado en agosto le cambiaría el
+    // gasto a los dos meses. Se usa su vencimiento si cae dentro, y su último
+    // día si no —que es lo más tarde que ese mes pudo pagarse.
+    //
+    // Un **ingreso** se fecha siempre hoy, sea del mes que sea: es el día en que
+    // la plata entró. Marcar el sueldo de agosto en septiembre lo anota en
+    // septiembre, que es cuando llegó, y la ficha de agosto es la que dice a qué
+    // mes corresponde — son dos preguntas distintas y cada una tiene su sitio.
+    //
+    // Sin esto el asiento quedaba en agosto mientras el saldo se movía hoy, y la
+    // curva de patrimonio —que se reconstruye hacia atrás desde el saldo
+    // actual— mostraba esa plata como si hubiera estado ahí desde agosto.
     final vencimientoDelMes = filaMes?['dueDate'] != null
         ? DateTime.fromMillisecondsSinceEpoch(filaMes!['dueDate'] as int, isUtc: true)
         : clock.toInstantValue('$mesDelPago-${_diaDeVencimiento(flujo, mesDelPago)}T12:00:00');
-    final cuando = mesDelPago == clock.monthKey()
+    final cuando = mesDelPago == clock.monthKey() || type == 'INCOME'
         ? clock.now()
         : (clock.monthKey(vencimientoDelMes) == mesDelPago
               ? vencimientoDelMes
@@ -365,7 +422,6 @@ void registerRecurringFlowsRoutes() {
         ? missedMonthsSince(desde, mesesPagados, clock.now(), clock)
         : <String>[];
 
-    final type = flujo['type'] as String;
     final transaccionId = _uuid.v4();
     final ahora = clock.now();
 

@@ -180,7 +180,12 @@ void main() {
       // Julio pagado, agosto no: es lo que permite que un mes esté saldado
       // mientras el siguiente sigue pendiente.
       expect(meses['2026-07']['paidAt'], isNotNull);
-      expect(DateTime.parse(meses['2026-07']['paidAt'] as String).month, 7);
+      // La marca de un gasto cae dentro de su mes; la de un ingreso es el día en
+      // que la plata entró, que puede ser cualquiera. Lo que no cambia es de qué
+      // mes es la ficha — y eso lo dice su clave, no su fecha.
+      if (tipo == 'EXPENSE') {
+        expect(DateTime.parse(meses['2026-07']['paidAt'] as String).month, 7);
+      }
       expect(meses['2026-08']['paidAt'], isNull);
 
       await api.post('/recurring-flows/$id/revert-payment', {'month': '2026-07'});

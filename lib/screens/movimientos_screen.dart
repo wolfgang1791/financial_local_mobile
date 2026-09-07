@@ -1291,6 +1291,11 @@ class _FilaFlujoState extends ConsumerState<_FilaFlujo> {
                       ],
                     ),
                   )
+                else if (!f.isActive)
+                  // Archivado: se ve por su historia, no para seguir marcándolo.
+                  // Ofrecer el botón sería invitar a registrar un mes de algo
+                  // que ya diste por terminado.
+                  Text('Archivado', style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.5)))
                 else
                   GestureDetector(
                     onTap: _ocupado ? null : _marcar,
