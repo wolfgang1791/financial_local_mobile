@@ -769,7 +769,11 @@ class _FormularioMontoState extends State<_FormularioMonto> {
           const SizedBox(height: Spacing.lg),
           FieldLabel(widget.esGasto ? 'Cuenta de pago' : 'Cuenta destino'),
           FieldSelector(
-            texto: cuenta?.name ?? 'Elige una',
+            texto: cuenta == null
+                ? 'Elige una'
+                : cuenta.isHidden
+                ? '${cuenta.name} · no cuenta en tu patrimonio'
+                : cuenta.name,
             onTap: () async {
               final elegida = await showAppModal<Account>(
                 context,
@@ -778,10 +782,18 @@ class _FormularioMontoState extends State<_FormularioMonto> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Las ocultas se ofrecen, pero dicen lo que son.
+                    //
+                    // Una cuenta oculta no entra en el patrimonio: marcar el
+                    // sueldo ahí le sube el saldo y deja el patrimonio igual.
+                    // No es un error —vos la ocultaste— pero sin decirlo se lee
+                    // como que la app perdió la plata. Quitarlas de la lista
+                    // sería peor: a veces el dinero entra ahí de verdad.
                     for (final c in widget.cuentas)
                       FieldOption(
                         titulo: c.name,
                         detalle: Money.format(c.balance, c.currency),
+                        subtitulo: c.isHidden ? 'Oculta · no cuenta en tu patrimonio' : null,
                         seleccionado: c.id == _cuentaId,
                         onTap: () => Navigator.of(context).pop(c),
                       ),
@@ -1053,7 +1065,15 @@ class _FilaFlujoState extends ConsumerState<_FilaFlujo> {
     // mes anterior— así que el caso normal es un toque en "Guardar"; el mes en
     // que la luz vino distinta se corrige acá, y no editando el flujo, que
     // cambiaría todos los meses a la vez.
-    final cuentas = ref.read(accountsProvider).valueOrNull ?? const <Account>[];
+    // Se **espera** a las cuentas en vez de leer lo que hubiera en caché.
+    //
+    // `valueOrNull` devuelve null mientras el provider no se haya resuelto, y
+    // nadie en esta pantalla lo miraba antes de este punto: entrar a Movimientos
+    // y marcar un flujo sin haber abierto "Registrar" daba una lista vacía, así
+    // que el selector de cuenta no aparecía nunca. Un control que existe o no
+    // según qué pantalla visitaste antes es peor que no tenerlo.
+    final cuentas = await ref.read(accountsProvider.future);
+    if (!mounted) return;
     final elegido = await _pedirMonto(context, f, widget.mes, widget.currency, cuentas);
     if (elegido == null || !mounted) return;
 
