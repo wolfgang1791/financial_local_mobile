@@ -12,7 +12,11 @@ import '../ui/fields.dart';
 import '../ui/format.dart';
 import '../ui/modal.dart';
 
-/// Corregir el saldo de una cuenta.
+/// Editar una cuenta: su nombre y su saldo.
+///
+/// El nombre no toca el ledger y podría guardarse al vuelo, pero va por el mismo
+/// paso de revisar que el saldo: un solo flujo donde se ve todo lo que va a
+/// cambiar, en vez de un campo que guarda solo y otro que pide confirmar.
 ///
 /// No es un `PATCH` del saldo — el backend ya no lo acepta —: la corrección
 /// entra al ledger como un `ADJUSTMENT`, así que queda explicable en el
@@ -21,10 +25,25 @@ import '../ui/modal.dart';
 /// confirmar se manda `expectedBalance` para que, si algo cambió la cuenta
 /// entre medio (otro movimiento, otra pestaña), el backend lo rechace en vez
 /// de pisar ese cambio en silencio.
+/// Cambiarle el nombre a una cuenta, y nada más.
+///
+/// Aparte del editor de saldo aunque el campo viviera ahí dentro: son dos
+/// decisiones distintas y meterlas en el mismo flujo obligaba a confirmar un
+/// saldo que no se quería tocar. Un gesto, un campo, guardar.
+Future<bool> abrirRenombrarCuenta(BuildContext context, {required Account cuenta}) async {
+  final hecho = await showAppModal<bool>(
+    context,
+    title: 'Cambiar el nombre',
+    subtitle: cuenta.name,
+    builder: (context) => _RenombrarCuenta(cuenta: cuenta),
+  );
+  return hecho ?? false;
+}
+
 Future<bool> abrirEditorSaldo(BuildContext context, {required Account cuenta}) async {
   final guardado = await showAppModal<bool>(
     context,
-    title: 'Corregir saldo',
+    title: 'Editar cuenta',
     subtitle: cuenta.name,
     builder: (context) => _EditorSaldo(cuenta: cuenta),
   );
@@ -58,8 +77,13 @@ class _EditorSaldo extends ConsumerStatefulWidget {
 }
 
 class _EditorSaldoState extends ConsumerState<_EditorSaldo> {
-  final _monto = TextEditingController();
+  // El nombre y el monto arrancan con lo que hay: así "Continuar" está
+  // disponible desde el primer momento y quien solo quiere renombrar no tiene
+  // que volver a escribir su saldo para poder avanzar.
+  late final _nombre = TextEditingController(text: widget.cuenta.name);
+  late final _monto = TextEditingController(text: widget.cuenta.balance.toStringAsFixed(2));
   int _paso = 1;
+  String? _nombreServidor;
   bool _cargando = false;
   bool _guardando = false;
   String? _error;
@@ -67,15 +91,22 @@ class _EditorSaldoState extends ConsumerState<_EditorSaldo> {
 
   @override
   void dispose() {
+    _nombre.dispose();
     _monto.dispose();
     super.dispose();
   }
 
   double? get _montoValido => double.tryParse(_monto.text.replaceAll(',', ''));
+  String get _nombreNuevo => _nombre.text.trim();
+  bool get _renombra => _nombreServidor != null && _nombreNuevo != _nombreServidor;
 
   Future<void> _previsualizar() async {
     if (_montoValido == null) {
       setState(() => _error = 'Escribe un monto válido.');
+      return;
+    }
+    if (_nombreNuevo.isEmpty) {
+      setState(() => _error = 'La cuenta necesita un nombre.');
       return;
     }
     setState(() {
@@ -89,6 +120,7 @@ class _EditorSaldoState extends ConsumerState<_EditorSaldo> {
           .firstWhere((a) => a.id == widget.cuenta.id, orElse: () => widget.cuenta);
       setState(() {
         _saldoServidor = actual.balance;
+        _nombreServidor = actual.name;
         _paso = 2;
       });
     } on ApiException catch (e) {
@@ -108,11 +140,21 @@ class _EditorSaldoState extends ConsumerState<_EditorSaldo> {
       _error = null;
     });
     try {
-      await ref.read(apiProvider).post('/accounts/${widget.cuenta.id}/balance', {
-        'balance': nuevo,
-        'occurredAt': DateTime.now().toIso8601String(),
-        'expectedBalance': _saldoServidor,
-      });
+      // Primero el nombre, después el saldo. El nombre no puede fallar por
+      // concurrencia; el saldo sí. Si el saldo se rechaza, el nombre ya quedó y
+      // el error habla solo de lo que falta.
+      if (_renombra) {
+        await ref.read(apiProvider).patch('/accounts/${widget.cuenta.id}', {'name': _nombreNuevo});
+      }
+      // Sin diferencia no se llama: evita un 409 falso si el saldo cambió por
+      // otro lado mientras solo se quería renombrar.
+      if ((nuevo - _saldoServidor!).abs() >= 0.005) {
+        await ref.read(apiProvider).post('/accounts/${widget.cuenta.id}/balance', {
+          'balance': nuevo,
+          'occurredAt': DateTime.now().toIso8601String(),
+          'expectedBalance': _saldoServidor,
+        });
+      }
       ref
         ..invalidate(cashPositionProvider)
         ..invalidate(recentTransactionsProvider)
@@ -142,12 +184,16 @@ class _EditorSaldoState extends ConsumerState<_EditorSaldo> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Saldo actual: ${Money.format(widget.cuenta.balance, widget.cuenta.currency)}',
-            style: AppText.small(colors.oliveInk.withValues(alpha: 0.75)),
+          const FieldLabel('Nombre'),
+          FieldBox(
+            child: AppTextField(
+              controller: _nombre,
+              placeholder: 'Ej. Cuenta de ahorros',
+              onChanged: (_) => setState(() {}),
+            ),
           ),
           const SizedBox(height: Spacing.lg),
-          const FieldLabel('¿Cuál es el saldo real?'),
+          const FieldLabel('Saldo real'),
           FieldBox(
             child: Row(
               children: [
@@ -185,13 +231,23 @@ class _EditorSaldoState extends ConsumerState<_EditorSaldo> {
     }
 
     final diferencia = _montoValido! - _saldoServidor!;
+    final hayAjuste = diferencia.abs() >= 0.005;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (_renombra) ...[
+          Text(
+            'Se renombra de «$_nombreServidor» a «$_nombreNuevo».',
+            style: AppText.body(colors.foreground),
+          ),
+          const SizedBox(height: Spacing.sm),
+        ],
         Text(
-          diferencia == 0
-              ? 'No hay diferencia con lo que ya tenías registrado.'
+          !hayAjuste
+              ? (_renombra
+                    ? 'El saldo no cambia: no se registra ningún ajuste.'
+                    : 'No hay diferencia con lo que ya tenías registrado.')
               : 'Esto ajusta tu saldo en ${Money.signed(diferencia, user.currency)}.',
           style: AppText.body(colors.foreground),
         ),
@@ -207,9 +263,17 @@ class _EditorSaldoState extends ConsumerState<_EditorSaldo> {
         ],
         const SizedBox(height: Spacing.xl),
         AppButton(
-          label: 'Confirmar ajuste',
+          label: hayAjuste
+              ? 'Confirmar ajuste'
+              : _renombra
+              ? 'Guardar el nombre'
+              : 'Cerrar',
           busy: _guardando,
-          onPressed: _guardando ? null : _confirmar,
+          onPressed: _guardando
+              ? null
+              : (!hayAjuste && !_renombra)
+              ? () => Navigator.of(context).pop(false)
+              : _confirmar,
         ),
       ],
     );
@@ -342,6 +406,91 @@ class _NuevaCuentaState extends ConsumerState<_NuevaCuenta> {
         ],
         const SizedBox(height: Spacing.xl),
         AppButton(label: 'Crear cuenta', busy: _guardando, onPressed: _guardando ? null : _guardar),
+      ],
+    );
+  }
+}
+
+/// El formulario de renombrar: un campo y un botón.
+class _RenombrarCuenta extends ConsumerStatefulWidget {
+  const _RenombrarCuenta({required this.cuenta});
+
+  final Account cuenta;
+
+  @override
+  ConsumerState<_RenombrarCuenta> createState() => _RenombrarCuentaState();
+}
+
+class _RenombrarCuentaState extends ConsumerState<_RenombrarCuenta> {
+  late final _nombre = TextEditingController(text: widget.cuenta.name);
+  bool _guardando = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nombre.dispose();
+    super.dispose();
+  }
+
+  Future<void> _guardar() async {
+    final nuevo = _nombre.text.trim();
+    if (nuevo.isEmpty) {
+      setState(() => _error = 'La cuenta necesita un nombre.');
+      return;
+    }
+    // Sin cambio no se llama: pedirle al servidor que guarde lo que ya tiene es
+    // una petición que solo puede salir mal.
+    if (nuevo == widget.cuenta.name) {
+      Navigator.of(context).pop(false);
+      return;
+    }
+    setState(() {
+      _guardando = true;
+      _error = null;
+    });
+    try {
+      await ref.read(apiProvider).patch('/accounts/${widget.cuenta.id}', {'name': nuevo});
+      ref
+        ..invalidate(accountsProvider)
+        ..invalidate(cashPositionProvider);
+      if (mounted) Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } catch (_) {
+      setState(() => _error = 'No llegué al servidor. Inténtalo otra vez.');
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const FieldLabel('Nombre'),
+        FieldBox(
+          child: AppTextField(
+            controller: _nombre,
+            // El foco va acá: es lo único que hay que escribir.
+            autofocus: true,
+            placeholder: 'Ej. Cuenta de ahorros',
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+        const SizedBox(height: Spacing.sm),
+        Text(
+          'Solo cambia cómo se llama. Su saldo y sus movimientos se quedan como están.',
+          style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.65)),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: Spacing.sm),
+          Text(_error!, style: AppText.small(colors.danger)),
+        ],
+        const SizedBox(height: Spacing.xl),
+        AppButton(label: 'Guardar', busy: _guardando, onPressed: _guardando ? null : _guardar),
       ],
     );
   }

@@ -383,7 +383,17 @@ void registerRecurringFlowsRoutes() {
     // gasto— y ni el saldo ni la curva se mueven.
     //
     // El mes en curso sí mueve el saldo: ahí la plata está saliendo ahora.
-    final esMesPasado = mesDelPago != clock.monthKey();
+    //
+    // Y los **ingresos** de meses pasados también, aunque el mes ya haya
+    // cerrado: un sueldo que corresponde a agosto y te entra hoy pertenece a
+    // agosto, pero llegó hoy — tu saldo no lo incluye, y neutralizarlo dejaba el
+    // patrimonio corto sin forma de arreglarlo. Un gasto viejo es al revés: el
+    // alquiler de julio ya salió de la cuenta en julio, y volver a descontarlo
+    // al marcarlo lo contaría dos veces.
+    //
+    // La regla vale porque los dos casos se dan en direcciones distintas: un
+    // ingreso se cobra tarde, un alquiler no se paga tarde.
+    final yaEstabaEnElSaldo = mesDelPago != clock.monthKey() && type == 'EXPENSE';
     // Ocurre en el mes elegido; se registró ahora. Son dos fechas distintas y
     // el historial las usa para cosas distintas.
 
@@ -399,7 +409,7 @@ void registerRecurringFlowsRoutes() {
       'occurredAt': cuando.millisecondsSinceEpoch,
       'createdAt': ahora.millisecondsSinceEpoch,
     });
-    if (esMesPasado) {
+    if (yaEstabaEnElSaldo) {
       // Monto cero no necesita contrapartida: no movió nada.
       if (amount != 0) {
         await db.insert('Transaction', {

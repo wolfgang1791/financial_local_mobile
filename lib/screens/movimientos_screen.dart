@@ -303,7 +303,21 @@ class _ChipCuenta extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          FieldOption(titulo: 'Corregir saldo', onTap: () => Navigator.of(context).pop('editar')),
+          // Dos acciones y no una: renombrar y corregir el saldo son cosas
+          // distintas, y estaban en el mismo sitio detrás del rótulo "Editar
+          // cuenta". Lo que abría era el editor de **saldo** —dos pasos, con
+          // previsualización y el foco en el monto— con un campo de nombre
+          // arriba. Cambiar un nombre obligaba a pasar por la confirmación de un
+          // saldo que no querías tocar, así que nadie encontraba el nombre.
+          FieldOption(
+            titulo: 'Cambiar el nombre',
+            onTap: () => Navigator.of(context).pop('renombrar'),
+          ),
+          FieldOption(
+            titulo: 'Corregir el saldo',
+            subtitulo: 'Cuando el banco dice otra cosa',
+            onTap: () => Navigator.of(context).pop('saldo'),
+          ),
           FieldOption(
             titulo: cuenta.isHidden ? 'Mostrar cuenta' : 'Ocultar cuenta del patrimonio',
             onTap: () => Navigator.of(context).pop('ocultar'),
@@ -326,7 +340,9 @@ class _ChipCuenta extends ConsumerWidget {
 
     if (!context.mounted) return;
     switch (accion) {
-      case 'editar':
+      case 'renombrar':
+        await abrirRenombrarCuenta(context, cuenta: _comoAccount);
+      case 'saldo':
         await abrirEditorSaldo(context, cuenta: _comoAccount);
       case 'ocultar':
         await _toggleOculta(ref);
@@ -652,32 +668,65 @@ String _claveDe(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}'
 ///
 /// Devuelve `null` si se cancela. Cero es una respuesta válida: un mes puede no
 /// haberse cobrado y aun así querer quedar registrado.
-Future<double?> _pedirMonto(
+/// Cuánto fue y a qué cuenta va. `null` si se cerró sin guardar.
+///
+/// Las dos preguntas juntas y no en dos pasos: son la misma decisión —"registro
+/// esto"— y partirlas obligaría a confirmar dos veces lo mismo.
+Future<({double monto, String? cuentaId})?> _pedirMonto(
   BuildContext context,
   RecurringFlow f,
   String mes,
   String currency,
+  List<Account> cuentas,
 ) async {
   final controlador = TextEditingController(text: f.montoDe(mes).toStringAsFixed(2));
-  final monto = await showAppModal<double>(
+  final resultado = await showAppModal<({double monto, String? cuentaId})>(
     context,
     title: f.isExpense ? '¿Cuánto pagaste?' : '¿Cuánto recibiste?',
     subtitle: f.name,
-    builder: (context) => _FormularioMonto(controlador: controlador, currency: currency),
+    builder: (context) => _FormularioMonto(
+      controlador: controlador,
+      currency: currency,
+      cuentas: cuentas,
+      // La declarada del flujo es el punto de partida; el selector existe para
+      // el mes en que fue otra.
+      cuentaInicial: f.accountId,
+      esGasto: f.isExpense,
+    ),
   );
   controlador.dispose();
-  return monto;
+  return resultado;
 }
 
-class _FormularioMonto extends StatelessWidget {
-  const _FormularioMonto({required this.controlador, required this.currency});
+class _FormularioMonto extends StatefulWidget {
+  const _FormularioMonto({
+    required this.controlador,
+    required this.currency,
+    required this.cuentas,
+    required this.cuentaInicial,
+    required this.esGasto,
+  });
 
   final TextEditingController controlador;
   final String currency;
+  final List<Account> cuentas;
+  final String? cuentaInicial;
+  final bool esGasto;
+
+  @override
+  State<_FormularioMonto> createState() => _FormularioMontoState();
+}
+
+class _FormularioMontoState extends State<_FormularioMonto> {
+  late String? _cuentaId =
+      widget.cuentaInicial ?? (widget.cuentas.isEmpty ? null : widget.cuentas.first.id);
 
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.of(context);
+    final controlador = widget.controlador;
+    final currency = widget.currency;
+    final cuenta = widget.cuentas.where((c) => c.id == _cuentaId).firstOrNull;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -708,13 +757,48 @@ class _FormularioMonto extends StatelessWidget {
           'Solo para este mes. Los otros meses no cambian.',
           style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.65)),
         ),
+        // De qué cuenta sale, o a cuál entra.
+        //
+        // El motor ya aceptaba otra cuenta al marcar; lo que faltaba era
+        // preguntarlo. Sin esto el cobro caía siempre en la cuenta declarada del
+        // flujo, aunque este mes hubiera entrado en otra — y si el flujo no
+        // tenía ninguna, no había forma de marcarlo.
+        //
+        // Solo con más de una cuenta: con una sola no hay nada que elegir.
+        if (widget.cuentas.length > 1) ...[
+          const SizedBox(height: Spacing.lg),
+          FieldLabel(widget.esGasto ? 'Cuenta de pago' : 'Cuenta destino'),
+          FieldSelector(
+            texto: cuenta?.name ?? 'Elige una',
+            onTap: () async {
+              final elegida = await showAppModal<Account>(
+                context,
+                title: widget.esGasto ? '¿De qué cuenta salió?' : '¿A qué cuenta entró?',
+                builder: (context) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final c in widget.cuentas)
+                      FieldOption(
+                        titulo: c.name,
+                        detalle: Money.format(c.balance, c.currency),
+                        seleccionado: c.id == _cuentaId,
+                        onTap: () => Navigator.of(context).pop(c),
+                      ),
+                  ],
+                ),
+              );
+              if (elegida != null) setState(() => _cuentaId = elegida.id);
+            },
+          ),
+        ],
         const SizedBox(height: Spacing.xl),
         AppButton(
           label: 'Guardar',
           onPressed: () {
             final v = double.tryParse(controlador.text.replaceAll(',', ''));
             if (v == null || v < 0) return;
-            Navigator.of(context).pop(v);
+            Navigator.of(context).pop((monto: v, cuentaId: _cuentaId));
           },
         ),
       ],
@@ -969,20 +1053,26 @@ class _FilaFlujoState extends ConsumerState<_FilaFlujo> {
     // mes anterior— así que el caso normal es un toque en "Guardar"; el mes en
     // que la luz vino distinta se corrige acá, y no editando el flujo, que
     // cambiaría todos los meses a la vez.
-    final monto = await _pedirMonto(context, f, widget.mes, widget.currency);
-    if (monto == null || !mounted) return;
+    final cuentas = ref.read(accountsProvider).valueOrNull ?? const <Account>[];
+    final elegido = await _pedirMonto(context, f, widget.mes, widget.currency, cuentas);
+    if (elegido == null || !mounted) return;
 
     setState(() => _ocupado = true);
     try {
       final r =
           await ref.read(apiProvider).post('/recurring-flows/${f.id}/pay', {
                 'month': widget.mes,
-                'amount': monto,
+                'amount': elegido.monto,
+                // La cuenta elegida en el formulario, no la declarada del flujo:
+                // el motor ya la aceptaba y nadie se la mandaba.
+                if (elegido.cuentaId != null) 'accountId': elegido.cuentaId,
               })
               as Map<String, dynamic>;
       ref.invalidate(recurringFlowsProvider);
       ref.invalidate(cashPositionProvider);
       ref.invalidate(recentTransactionsProvider);
+      // Y las cuentas: marcar mueve el saldo de la que se eligió.
+      ref.invalidate(accountsProvider);
 
       final saldados = ((r['saldados'] as List?) ?? []).cast<String>();
       if (saldados.isNotEmpty && mounted) {

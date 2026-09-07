@@ -30,10 +30,13 @@ void main() {
     return lista.cast<Map<String, dynamic>>().firstWhere((f) => f['id'] == id);
   }
 
-  Future<Map<String, dynamic>> unFlujoSinPagos() async {
+  Future<Map<String, dynamic>> unFlujoSinPagos({bool? gasto}) async {
     final lista = await api.get('/recurring-flows') as List;
     return lista.cast<Map<String, dynamic>>().firstWhere(
-      (f) => (f['paidMonths'] as List).isEmpty && f['accountId'] != null,
+      (f) =>
+          (f['paidMonths'] as List).isEmpty &&
+          f['accountId'] != null &&
+          (gasto == null || (f['type'] == 'EXPENSE') == gasto),
     );
   }
 
@@ -98,11 +101,12 @@ void main() {
         .toDouble();
   }
 
-  test('marcar un mes pasado no mueve el patrimonio de hoy', () async {
-    // La plata de marzo ya entró o salió en marzo: el saldo de hoy ya la
-    // contiene. Registrarla ahora la contaría dos veces — que es exactamente lo
-    // que infló un patrimonio real en S/ 3,210 al estrenar esta pantalla.
-    final flujo = await unFlujoSinPagos();
+  test('marcar un GASTO de un mes pasado no mueve el patrimonio de hoy', () async {
+    // El alquiler de marzo salió de la cuenta en marzo: el saldo de hoy ya lo
+    // tiene descontado. Registrarlo ahora lo contaría dos veces — que es
+    // exactamente lo que infló un patrimonio real en S/ 3,210 al estrenar esta
+    // pantalla.
+    final flujo = await unFlujoSinPagos(gasto: true);
     final cuentaId = flujo['accountId'] as String;
     final antes = await saldoDe(cuentaId);
 
@@ -111,6 +115,22 @@ void main() {
     expect(await saldoDe(cuentaId), closeTo(antes, 0.001));
     // Y el mes queda registrado igual: no mover el saldo no es no anotarlo.
     expect((await flujoPorId(flujo['id'] as String))['paidMonths'], contains('2026-03'));
+  });
+
+  test('marcar un INGRESO de un mes pasado sí lo mueve', () async {
+    // Al revés que el gasto, y por dónde está la plata: un sueldo que
+    // corresponde a marzo y te entra hoy todavía no está en tu saldo.
+    // Neutralizarlo dejaba el patrimonio corto sin forma de arreglarlo.
+    final flujo = await unFlujoSinPagos(gasto: false);
+    final cuentaId = flujo['accountId'] as String;
+    final antes = await saldoDe(cuentaId);
+
+    final r =
+        await api.post('/recurring-flows/${flujo['id']}/pay', {'month': '2026-03', 'amount': 800})
+            as Map;
+    expect(r, isNotNull);
+
+    expect(await saldoDe(cuentaId), closeTo(antes + 800, 0.001));
   });
 
   test('el mes en curso sí mueve el patrimonio', () async {
@@ -154,11 +174,11 @@ void main() {
     );
   });
 
-  test('cambiar el monto de un mes pasado no mueve el patrimonio', () async {
-    // El mes pasado se guardó con su ajuste compensatorio: los dos tienen que
-    // cambiar a la vez. Si solo cambiara el movimiento, la diferencia se le
-    // escaparía al saldo por la puerta de atrás.
-    final flujo = await unFlujoSinPagos();
+  test('cambiar el monto de un GASTO de un mes pasado no mueve el patrimonio', () async {
+    // El gasto de un mes pasado se guardó con su ajuste compensatorio: los dos
+    // tienen que cambiar a la vez. Si solo cambiara el movimiento, la diferencia
+    // se le escaparía al saldo por la puerta de atrás.
+    final flujo = await unFlujoSinPagos(gasto: true);
     final cuentaId = flujo['accountId'] as String;
     final antes = await saldoDe(cuentaId);
 
