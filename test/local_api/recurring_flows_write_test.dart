@@ -151,6 +151,14 @@ void main() {
     expect(archivado['isActive'], false);
     expect(archivado['paidMonths'], isNotEmpty);
 
+    // Deja de aplicar de este mes en adelante, y lo anterior sigue estando: la
+    // ficha del mes en curso —que nadie marcó— se va, y las viejas se quedan.
+    final hoy = DateTime.now();
+    final mesActual = '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}';
+    final meses = (archivado['months'] as Map).keys.cast<String>().toList();
+    expect(meses.where((m) => m.compareTo(mesActual) >= 0), isEmpty);
+    expect(meses.where((m) => m.compareTo(mesActual) < 0), isNotEmpty);
+
     // ...pero sus movimientos y el patrimonio no se mueven.
     final asientosDespues = ((await api.get('/transactions?take=500') as Map)['items'] as List)
         .where((t) => (t as Map)['recurringFlowId'] == id)

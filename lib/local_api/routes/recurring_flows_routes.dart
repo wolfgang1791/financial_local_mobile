@@ -289,6 +289,21 @@ void registerRecurringFlowsRoutes() {
     final pagos = (pagosFila.first['n'] as num).toInt();
 
     if (pagos > 0) {
+      // Archivar corta **desde el mes en que se borra hacia adelante**: se van
+      // las fichas de este mes y los siguientes que nadie llegó a marcar, y se
+      // quedan las anteriores y cualquiera que sí tenga pago. Es lo que uno
+      // espera al borrar algo a mitad de año: deja de aplicar desde hoy, y lo
+      // que ya pasó sigue estando.
+      //
+      // Con pago no se tocan, ni siquiera las de este mes: el dinero se movió, y
+      // borrar su ficha dejaría el asiento sin el registro que dice de qué mes
+      // era.
+      final clock = await UserClock.forUser(db, userId);
+      await db.delete(
+        'RecurringFlowMonth',
+        where: 'recurringFlowId = ? AND month >= ? AND paidAt IS NULL',
+        whereArgs: [id, clock.monthKey()],
+      );
       await db.update('RecurringFlow', {'isActive': 0}, where: 'id = ?', whereArgs: [id]);
     } else {
       await db.delete('RecurringFlow', where: 'id = ?', whereArgs: [id]);
