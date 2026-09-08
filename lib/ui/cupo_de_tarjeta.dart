@@ -13,21 +13,16 @@ import 'format.dart';
 ///
 /// Sin cupo declarado no se dibuja: una barra sin final no dice nada, y fingir
 /// uno sería inventarse el dato más importante.
+///
+/// Vive solo donde se decide: al pagar la tarjeta. En la tarjeta de resumen
+/// estorbaba — ahí se lee "cuánto tengo" de un vistazo, y una barra por cada
+/// plástico convierte esa fila en otra cosa que hay que leer.
 class CupoDeTarjeta extends StatelessWidget {
-  const CupoDeTarjeta({
-    super.key,
-    required this.debe,
-    required this.cupo,
-    required this.currency,
-    this.compacta = false,
-  });
+  const CupoDeTarjeta({super.key, required this.debe, required this.cupo, required this.currency});
 
   final double debe;
   final double? cupo;
   final String currency;
-
-  /// En una fila estrecha —el chip de la tarjeta— solo la barra y una línea.
-  final bool compacta;
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +45,7 @@ class CupoDeTarjeta extends StatelessWidget {
         : colors.sageDark;
 
     return Padding(
-      padding: EdgeInsets.only(top: compacta ? 4 : Spacing.sm),
+      padding: const EdgeInsets.only(top: Spacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
