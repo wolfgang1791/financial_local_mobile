@@ -317,15 +317,20 @@ class _TarjetaPatrimonio extends ConsumerWidget {
                             style: AppText.kicker(colors.sageInk.withValues(alpha: 0.8)),
                           ),
                         ),
-                        Text(
-                          (esCredito && subtotal != 0
-                                  ? (subtotal > 0 ? 'debes ' : 'a favor ')
-                                  : '') +
-                              tapar(Money.format(subtotal.abs(), currency), ocultos),
-                          style: AppText.money(
-                            esCredito ? colors.oliveInk.withValues(alpha: 0.75) : colors.foreground,
-                            size: 12.5,
-                            weight: FontWeight.w600,
+                        Padding(
+                          padding: const EdgeInsets.only(right: _anchoAcciones + 6),
+                          child: Text(
+                            (esCredito && subtotal != 0
+                                    ? (subtotal > 0 ? 'debes ' : 'a favor ')
+                                    : '') +
+                                tapar(Money.format(subtotal.abs(), currency), ocultos),
+                            style: AppText.money(
+                              esCredito
+                                  ? colors.oliveInk.withValues(alpha: 0.75)
+                                  : colors.foreground,
+                              size: 12.5,
+                              weight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -345,6 +350,20 @@ class _TarjetaPatrimonio extends ConsumerWidget {
   }
 }
 
+/// El ancho de la columna de estado y el de la columna de montos.
+///
+/// Fijos a propósito: son lo que hace que las pastillas y las cifras caigan
+/// siempre en la misma vertical, en vez de moverse con el largo del nombre de
+/// cada cuenta. El nombre se queda con lo que sobra y se corta si hace falta —es
+/// lo único de la fila que se puede leer a medias sin perder el dato—.
+const _anchoPastilla = 62.0;
+const _anchoMonto = 86.0;
+
+/// Lo que ocupa el botón de acciones al final de cada fila. El subtotal del
+/// grupo se separa otro tanto del borde para caer en la misma vertical que las
+/// cifras de sus filas: un total que no está sobre su columna hay que buscarlo.
+const _anchoAcciones = 22.0;
+
 class _FilaCuenta extends ConsumerWidget {
   const _FilaCuenta({required this.cuenta, required this.cuentan});
 
@@ -358,9 +377,15 @@ class _FilaCuenta extends ConsumerWidget {
   Account get _comoAccount => Account(
     id: cuenta.id,
     name: cuenta.name,
+    // El tipo viaja: sin él, el editor trataba una tarjeta como una cuenta de
+    // banco y le pedía el "saldo real" en vez de lo que debes, que es lo que
+    // ahí se corrige.
+    type: cuenta.type,
     currency: cuenta.currency,
     balance: cuenta.currentBalance,
+    creditLimit: cuenta.creditLimit,
     isHidden: cuenta.isHidden,
+    isPrimary: cuenta.isPrimary,
   );
 
   Future<void> _abrirAcciones(BuildContext context, WidgetRef ref) async {
@@ -473,21 +498,35 @@ class _FilaCuenta extends ConsumerWidget {
         }
         await _toggleOculta(context, ref);
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(Radii.pill),
-          color: off ? null : colors.sage.withValues(alpha: 0.16),
-          border: Border.all(color: off ? colors.surfaceBorder : const Color(0x00000000)),
-        ),
-        child: Text(
-          texto,
-          style: AppText.tiny(
-            esLaUltima
-                ? colors.oliveInk.withValues(alpha: 0.35)
-                : off
-                ? colors.oliveInk.withValues(alpha: 0.55)
-                : colors.sageInk,
+      // En una columna de ancho fijo, y pegada a la derecha.
+      //
+      // Antes iba justo detrás del nombre, así que cada pastilla caía en un
+      // sitio distinto —una por cada largo de nombre— y la columna se leía como
+      // una escalera. Con el ancho fijo todas empiezan y terminan a la misma
+      // altura, que es lo que hace que se lean de un vistazo como una columna de
+      // estados y no como una etiqueta suelta de cada fila.
+      child: SizedBox(
+        width: _anchoPastilla,
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(Radii.pill),
+              color: off ? null : colors.sage.withValues(alpha: 0.16),
+              border: Border.all(color: off ? colors.surfaceBorder : const Color(0x00000000)),
+            ),
+            child: Text(
+              texto,
+              maxLines: 1,
+              style: AppText.tiny(
+                esLaUltima
+                    ? colors.oliveInk.withValues(alpha: 0.35)
+                    : off
+                    ? colors.oliveInk.withValues(alpha: 0.55)
+                    : colors.sageInk,
+              ).copyWith(fontSize: 10),
+            ),
           ),
         ),
       ),
@@ -666,40 +705,65 @@ class _FilaCuenta extends ConsumerWidget {
               ),
             ),
             _pastillaContar(context, ref, colors, esCredito),
-            const SizedBox(width: Spacing.sm),
-            if (esCredito)
-              Padding(
-                padding: const EdgeInsets.only(right: 5),
-                child: Text(
-                  cuenta.currentBalance < 0 ? 'a favor' : 'debes',
-                  style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.5)),
+            const SizedBox(width: 6),
+            // El monto, también en columna fija y pegado a la derecha: es lo que
+            // permite comparar dos filas sin leer las cifras enteras. `FittedBox`
+            // encoge el caso raro —cinco dígitos y decimales— en vez de
+            // desbordar la fila.
+            SizedBox(
+              width: _anchoMonto,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // "a favor" solo cuando lo hay: que **debes** ya lo dice el
+                    // título del grupo, y repetirlo en cada fila era gastar el
+                    // ancho que necesitan las cifras para alinearse.
+                    if (esCredito && cuenta.currentBalance < 0)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Text(
+                          'a favor',
+                          style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.5)),
+                        ),
+                      ),
+                    Text(
+                      tapar(
+                        Money.format(
+                          esCredito ? cuenta.currentBalance.abs() : cuenta.currentBalance,
+                          cuenta.currency,
+                        ),
+                        ocultos,
+                      ),
+                      style: AppText.money(
+                        colors.foreground.withValues(alpha: cuenta.isHidden ? 0.4 : 1),
+                        size: 12.5,
+                        weight: FontWeight.w600,
+                      ).copyWith(decoration: cuenta.isHidden ? TextDecoration.lineThrough : null),
+                    ),
+                  ],
                 ),
               ),
-            Text(
-              tapar(
-                Money.format(
-                  esCredito ? cuenta.currentBalance.abs() : cuenta.currentBalance,
-                  cuenta.currency,
-                ),
-                ocultos,
-              ),
-              style: AppText.money(
-                colors.foreground.withValues(alpha: cuenta.isHidden ? 0.4 : 1),
-                size: 12.5,
-                weight: FontWeight.w600,
-              ).copyWith(decoration: cuenta.isHidden ? TextDecoration.lineThrough : null),
             ),
-            const SizedBox(width: Spacing.sm),
+            const SizedBox(width: 6),
             // Con borde y no un glifo suelto: un "⋮" flotando no se lee como
             // algo que se toca, y detrás de él están las únicas acciones de la
             // cuenta. Un menú que no parece un botón es un menú que no existe.
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(Radii.pill),
-                border: Border.all(color: colors.surfaceBorder),
+            SizedBox(
+              width: _anchoAcciones,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(Radii.pill),
+                    border: Border.all(color: colors.surfaceBorder),
+                  ),
+                  child: Text('⋮', style: AppText.small(colors.oliveInk.withValues(alpha: 0.6))),
+                ),
               ),
-              child: Text('⋮', style: AppText.small(colors.oliveInk.withValues(alpha: 0.6))),
             ),
           ],
         ),

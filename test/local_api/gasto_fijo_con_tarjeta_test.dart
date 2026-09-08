@@ -106,4 +106,30 @@ void main() {
 
     expect(((await cuenta(tarjeta['id'] as String))['currentBalance'] as num).toDouble(), 45.0);
   });
+
+  test('corregir lo que debes en la tarjeta queda como gasto, no como ingreso', () async {
+    final tarjeta =
+        await api.post('/accounts', {
+              'name': 'Tarjeta a corregir',
+              'type': 'CREDIT_CARD',
+              'currentBalance': 100.0,
+            })
+            as Map<String, dynamic>;
+
+    // "En realidad debo 150": son 50 más de deuda.
+    await api.post('/accounts/${tarjeta['id']}/balance', {
+      'balance': 150.0,
+      'expectedBalance': 100.0,
+      'occurredAt': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    expect(((await cuenta(tarjeta['id'] as String))['currentBalance'] as num).toDouble(), 150.0);
+
+    final items = ((await api.get('/transactions?take=500') as Map)['items'] as List)
+        .cast<Map<String, dynamic>>()
+        .where((t) => (t['account'] as Map)['name'] == 'Tarjeta a corregir')
+        .toList();
+    expect(items, isNotEmpty);
+    expect(items.first['type'], 'EXPENSE', reason: 'deber más no es plata que entró');
+  });
 }
