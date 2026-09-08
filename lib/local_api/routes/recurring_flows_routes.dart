@@ -3,7 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../data/api.dart' show ApiException;
 import '../../local_db/row_mapping.dart';
-import '../../local_engine/ledger.dart' show signedAmount;
+import '../../local_engine/ledger.dart' show balanceDelta;
 import '../../local_engine/months_util.dart';
 import '../../local_engine/recurring_flows_engine.dart';
 import '../../local_engine/user_clock.dart';
@@ -495,8 +495,12 @@ void registerRecurringFlowsRoutes() {
         });
       }
     } else {
+      // `balanceDelta` y no `signedAmount`: en una tarjeta el saldo es lo que
+      // **debes**, así que un gasto lo sube en vez de bajarlo. Con el signo
+      // plano, pagar un fijo con la tarjeta reducía la deuda como si hubieras
+      // abonado a la tarjeta en vez de haber comprado con ella.
       await db.rawUpdate('UPDATE Account SET currentBalance = currentBalance + ? WHERE id = ?', [
-        signedAmount(type, amount),
+        balanceDelta(cuenta.first['type'] as String, type, amount),
         accountId,
       ]);
     }
@@ -687,9 +691,21 @@ void registerRecurringFlowsRoutes() {
       );
     } else {
       // Mes en curso: la plata se movió de verdad, así que el saldo sigue la
-      // diferencia — ni el monto viejo entero ni el nuevo entero.
+      // diferencia — ni el monto viejo entero ni el nuevo entero. Y con el signo
+      // de la cuenta: en una tarjeta, gastar más es deber más.
+      final cuentaDelPago = await db.query(
+        'Account',
+        columns: ['type'],
+        where: 'id = ?',
+        whereArgs: [movimiento['accountId']],
+        limit: 1,
+      );
       await db.rawUpdate('UPDATE Account SET currentBalance = currentBalance + ? WHERE id = ?', [
-        signedAmount(movimiento['type'] as String, monto - anterior),
+        balanceDelta(
+          cuentaDelPago.first['type'] as String,
+          movimiento['type'] as String,
+          monto - anterior,
+        ),
         movimiento['accountId'],
       ]);
     }
@@ -781,11 +797,29 @@ void registerRecurringFlowsRoutes() {
 
     // Solo se devuelve al saldo lo que de verdad lo movió: un mes pasado entró
     // compensado y su neto sobre el saldo fue cero.
+    //
+    // Cada cuenta con su signo: revertir un gasto pagado con tarjeta tiene que
+    // **bajar** lo que debes, y con el signo plano lo subía.
+    final idsDeCuenta = aBorrar.map((t) => t['accountId'] as String).toSet().toList();
+    // Sin nada que borrar no hay a quién preguntarle el tipo, y un `IN ()` vacío
+    // no es SQL válido.
+    final tipos = idsDeCuenta.isEmpty
+        ? const <String, String>{}
+        : {
+            for (final fila in await db.query(
+              'Account',
+              columns: ['id', 'type'],
+              where: 'id IN (${List.filled(idsDeCuenta.length, '?').join(',')})',
+              whereArgs: idsDeCuenta,
+            ))
+              fila['id'] as String: fila['type'] as String,
+          };
     final netos = <String, double>{};
     for (final t in aBorrar) {
       final id = t['accountId'] as String;
       netos[id] =
-          (netos[id] ?? 0) + signedAmount(t['type'] as String, (t['amount'] as num).toDouble());
+          (netos[id] ?? 0) +
+          balanceDelta(tipos[id]!, t['type'] as String, (t['amount'] as num).toDouble());
     }
     for (final entrada in netos.entries) {
       if (entrada.value == 0) continue;
