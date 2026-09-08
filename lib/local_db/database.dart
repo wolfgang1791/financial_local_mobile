@@ -82,6 +82,14 @@ abstract final class LocalDatabase {
   /// Se comprueba y se agrega, sin número de versión: son columnas opcionales y
   /// añadirlas es idempotente si primero se mira si están.
   static Future<void> _alDia(Database db) async {
+    // El cupo de una tarjeta, para poder decir cuánto queda y no solo cuánto se
+    // debe. Nulo en el resto de las cuentas y en una tarjeta sin cupo escrito,
+    // que es un estado válido: media respuesta, no una mentira.
+    final deCuenta = await db.rawQuery('PRAGMA table_info(Account)');
+    if (!deCuenta.any((c) => c['name'] == 'creditLimit')) {
+      await db.execute('ALTER TABLE Account ADD COLUMN creditLimit DECIMAL');
+    }
+
     final columnas = await db.rawQuery('PRAGMA table_info(RecurringFlow)');
     if (!columnas.any((c) => c['name'] == 'monthlyAmounts')) {
       await db.execute('ALTER TABLE RecurringFlow ADD COLUMN monthlyAmounts TEXT');

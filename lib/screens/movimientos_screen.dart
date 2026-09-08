@@ -513,7 +513,15 @@ class _ChipCuenta extends ConsumerWidget {
             if (tiposDeCredito.contains(cuenta.type))
               Text('debes ', style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.55))),
             Text(
-              tapar(Money.format(cuenta.currentBalance, cuenta.currency), ocultos),
+              tapar(
+                Money.format(
+                  tiposDeCredito.contains(cuenta.type)
+                      ? cuenta.currentBalance.abs()
+                      : cuenta.currentBalance,
+                  cuenta.currency,
+                ),
+                ocultos,
+              ),
               style: AppText.money(
                 colors.oliveInk.withValues(alpha: cuenta.isHidden ? 0.45 : 0.7),
                 size: 12,

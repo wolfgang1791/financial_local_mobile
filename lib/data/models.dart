@@ -167,6 +167,7 @@ class CashPositionAccount {
     required this.name,
     required this.type,
     required this.currentBalance,
+    this.creditLimit,
     required this.currency,
     required this.isHidden,
   });
@@ -176,6 +177,7 @@ class CashPositionAccount {
     name: (j['name'] as String?) ?? '',
     type: (j['type'] as String?) ?? 'CASH',
     currentBalance: _num(j['currentBalance']),
+    creditLimit: _numOrNull(j['creditLimit']),
     currency: (j['currency'] as String?) ?? 'PEN',
     isHidden: (j['isHidden'] as bool?) ?? false,
   );
@@ -184,6 +186,10 @@ class CashPositionAccount {
   final String name;
   final String type;
   final double currentBalance;
+
+  /// El cupo de una tarjeta. `null` en el resto de las cuentas y en una tarjeta
+  /// sin cupo escrito — ahí se ve lo que debes y no cuánto queda.
+  final double? creditLimit;
   final String currency;
 
   /// Excluida del patrimonio a pedido del usuario. Viaja igual para que la
@@ -741,6 +747,7 @@ class Account {
     this.type = 'CASH',
     required this.currency,
     required this.balance,
+    this.creditLimit,
     required this.isHidden,
   });
 
@@ -750,6 +757,7 @@ class Account {
     type: (j['type'] as String?) ?? 'CASH',
     currency: (j['currency'] as String?) ?? 'PEN',
     balance: _num(j['currentBalance']),
+    creditLimit: _numOrNull(j['creditLimit']),
     isHidden: (j['isHidden'] as bool?) ?? false,
   );
 
@@ -761,6 +769,9 @@ class Account {
   final String type;
   final String currency;
   final double balance;
+
+  /// El cupo de una tarjeta. `null` en el resto y en una tarjeta sin cupo.
+  final double? creditLimit;
   final bool isHidden;
 
   /// Su saldo es deuda, no dinero: nunca entra en el patrimonio, y en un

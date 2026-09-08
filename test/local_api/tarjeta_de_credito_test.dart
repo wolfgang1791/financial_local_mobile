@@ -41,9 +41,9 @@ void main() {
           as Map<String, dynamic>;
 
   Future<double> saldoDe(String id) async =>
-      ((await api.get('/accounts') as List)
-                  .cast<Map<String, dynamic>>()
-                  .firstWhere((c) => c['id'] == id)['currentBalance']
+      ((await api.get('/accounts') as List).cast<Map<String, dynamic>>().firstWhere(
+                (c) => c['id'] == id,
+              )['currentBalance']
               as num)
           .toDouble();
 
@@ -140,5 +140,53 @@ void main() {
     expect(await saldoDe(tarjeta['id']), closeTo(55, 0.01));
     await api.delete('/transactions/${creado['id']}');
     expect(await saldoDe(tarjeta['id']), closeTo(0, 0.01));
+  });
+  test('pagar de más deja saldo a favor, no se acota en cero', () async {
+    // Puedes adelantar plata a la tarjeta. Acotar el pago en lo que debes haría
+    // desaparecer la diferencia: el dinero salió de tu cuenta y tendría que
+    // estar en algún sitio.
+    final tarjeta = await crearTarjeta();
+    final liquida = (await api.get('/accounts') as List).cast<Map<String, dynamic>>().firstWhere(
+      (c) => c['type'] == 'CHECKING',
+    );
+
+    await api.post('/transactions', {
+      'accountId': tarjeta['id'],
+      'type': 'EXPENSE',
+      'amount': 100,
+      'occurredAt': DateTime.now().toUtc().toIso8601String(),
+    });
+    final efectivoAntes = await saldoDe(liquida['id']);
+
+    await api.post('/transactions/transfer', {
+      'fromAccountId': liquida['id'],
+      'toAccountId': tarjeta['id'],
+      'amount': 160,
+      'occurredAt': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    // 100 de deuda menos 160 pagados: 60 a favor.
+    expect(await saldoDe(tarjeta['id']), closeTo(-60, 0.01));
+    // Y salieron los 160 completos de la cuenta.
+    expect(await saldoDe(liquida['id']), closeTo(efectivoAntes - 160, 0.01));
+  });
+
+  test('el cupo viaja con la cuenta', () async {
+    final conCupo =
+        await api.post('/accounts', {
+              'name': 'CMR con cupo',
+              'type': 'CREDIT_CARD',
+              'currentBalance': 0,
+              'currency': 'PEN',
+              'creditLimit': 5000,
+            })
+            as Map<String, dynamic>;
+    expect((conCupo['creditLimit'] as num).toDouble(), 5000);
+
+    // Y llega a la tarjeta de patrimonio, que es donde se dibuja la barra.
+    final cuentas = ((await api.get('/financial-engine/cash-position') as Map)['accounts'] as List)
+        .cast<Map<String, dynamic>>();
+    final enLaTarjeta = cuentas.firstWhere((c) => c['id'] == conCupo['id']);
+    expect((enLaTarjeta['creditLimit'] as num).toDouble(), 5000);
   });
 }

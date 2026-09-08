@@ -81,6 +81,7 @@ void registerAccountsRoutes() {
       'type': datos['type'],
       'institution': datos['institution'],
       'currentBalance': (datos['currentBalance'] as num).toDouble(),
+      'creditLimit': (datos['creditLimit'] as num?)?.toDouble(),
       'currency': (datos['currency'] as String?) ?? 'PEN',
       'isArchived': 0,
       'isHidden': 0,
@@ -116,7 +117,7 @@ void registerAccountsRoutes() {
     if (existente.isEmpty) throw ApiException('Account $id not found', status: 404);
 
     final cambios = <String, Object?>{'updatedAt': DateTime.now().toUtc().millisecondsSinceEpoch};
-    for (final campo in ['name', 'type', 'institution', 'currency']) {
+    for (final campo in ['name', 'type', 'institution', 'currency', 'creditLimit']) {
       if (datos.containsKey(campo)) cambios[campo] = datos[campo];
     }
     if (datos.containsKey('isHidden')) {

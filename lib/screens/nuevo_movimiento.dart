@@ -16,6 +16,7 @@ import '../ui/format.dart';
 import '../ui/icons.dart';
 import '../ui/modal.dart';
 import '../ui/payment_method_field.dart';
+import '../ui/cupo_de_tarjeta.dart';
 
 /// Registrar un movimiento.
 ///
@@ -39,7 +40,10 @@ class _Formulario extends ConsumerStatefulWidget {
   ConsumerState<_Formulario> createState() => _FormularioState();
 }
 
-enum _Modo { gasto, ingreso, transferencia }
+/// Pagar la tarjeta es su propio modo y no un gasto con otro nombre: mueve plata
+/// de tu cuenta al plástico, así que **no cuenta como gasto nuevo** — el gasto
+/// fue la compra. Se registra como transferencia, igual que en la web.
+enum _Modo { gasto, ingreso, transferencia, tarjeta }
 
 class _FormularioState extends ConsumerState<_Formulario> {
   /// Gasto por defecto: es lo que se registra el 90% de las veces. Un ingreso
@@ -49,6 +53,10 @@ class _FormularioState extends ConsumerState<_Formulario> {
   final _detalle = TextEditingController();
   String? _cuentaId;
   String? _cuentaDestinoId;
+
+  /// Qué tarjeta se está pagando. `null` es la que más debe, que es la que se
+  /// paga.
+  String? _tarjetaId;
   Category? _categoria;
 
   /// El medio de pago, o `null` mientras no se elija ninguno.
@@ -91,6 +99,10 @@ class _FormularioState extends ConsumerState<_Formulario> {
       setState(() => _error = 'Elige a qué cuenta va la plata.');
       return;
     }
+    if (_modo == _Modo.tarjeta && _tarjetaId == null) {
+      setState(() => _error = 'Elige qué tarjeta vas a pagar.');
+      return;
+    }
 
     setState(() {
       _guardando = true;
@@ -98,7 +110,18 @@ class _FormularioState extends ConsumerState<_Formulario> {
     });
 
     try {
-      if (_modo == _Modo.transferencia) {
+      if (_modo == _Modo.tarjeta) {
+        // Una transferencia, no un gasto: baja lo que debes y sale de la cuenta
+        // elegida. Sin acotar el monto — pagar de más deja saldo a favor, que es
+        // plata tuya y taparla haría dudar de dónde fue.
+        await ref.read(apiProvider).post('/transactions/transfer', {
+          'fromAccountId': cuentaId,
+          'toAccountId': _tarjetaId,
+          'amount': monto,
+          'occurredAt': _instanteDe(_fecha).toIso8601String(),
+          'detail': _detalle.text.trim().isNotEmpty ? _detalle.text.trim() : 'Pago de tarjeta',
+        });
+      } else if (_modo == _Modo.transferencia) {
         await ref.read(apiProvider).post('/transactions/transfer', {
           'fromAccountId': cuentaId,
           'toAccountId': _cuentaDestinoId,
@@ -161,6 +184,13 @@ class _FormularioState extends ConsumerState<_Formulario> {
         cuentas.where((c) => c.id == _cuentaId).firstOrNull ??
         (cuentas.isEmpty ? null : cuentas.first);
     final esTransferencia = _modo == _Modo.transferencia;
+    final esPagoDeTarjeta = _modo == _Modo.tarjeta;
+    // Las de uso diario: crédito sin deuda asociada. `/accounts` ya las trae y
+    // deja fuera el espejo de un préstamo.
+    final tarjetas = cuentas.where((c) => c.esDeCredito).toList()
+      ..sort((a, b) => b.balance.compareTo(a.balance));
+    final liquidas = cuentas.where((c) => !c.esDeCredito).toList();
+    final tarjeta = tarjetas.where((c) => c.id == _tarjetaId).firstOrNull ?? tarjetas.firstOrNull;
     // El destino solo puede ser una cuenta de la misma moneda: convertir en
     // el momento de mover plata entre cuentas propias mezclaría dos
     // decisiones (mover y cambiar de moneda) en una sola acción.
@@ -179,7 +209,10 @@ class _FormularioState extends ConsumerState<_Formulario> {
           opciones: [
             ('Gasto', _Modo.gasto),
             ('Ingreso', _Modo.ingreso),
-            if (cuentas.length > 1) ('Transferir', _Modo.transferencia),
+            if (liquidas.length > 1) ('Transferir', _Modo.transferencia),
+            // Sin tarjeta o sin de dónde pagarla no aparece: un modo que solo
+            // puede fallar no es un modo.
+            if (tarjetas.isNotEmpty && liquidas.isNotEmpty) ('Pagar tarjeta', _Modo.tarjeta),
           ],
           valor: _modo,
           onChange: (v) => setState(() {
@@ -191,7 +224,13 @@ class _FormularioState extends ConsumerState<_Formulario> {
         ),
         const SizedBox(height: Spacing.xl),
 
-        FieldLabel(esTransferencia ? 'Monto a mover' : 'Monto'),
+        FieldLabel(
+          esPagoDeTarjeta
+              ? 'Cuánto vas a pagar'
+              : esTransferencia
+              ? 'Monto a mover'
+              : 'Monto',
+        ),
         FieldBox(
           child: Row(
             children: [
@@ -241,8 +280,17 @@ class _FormularioState extends ConsumerState<_Formulario> {
           const SizedBox(height: Spacing.lg),
         ],
 
-        if (cuentas.length > 1) ...[
-          FieldLabel(esTransferencia ? 'Desde' : 'Cuenta'),
+        // En modo tarjeta el selector va siempre, aunque haya una sola cuenta
+        // líquida: hay que decir de dónde sale la plata, y "Cuenta" en blanco es
+        // exactamente lo que no se entiende al pagar.
+        if (cuentas.length > 1 || esPagoDeTarjeta) ...[
+          FieldLabel(
+            esPagoDeTarjeta
+                ? 'Con qué cuenta'
+                : esTransferencia
+                ? 'Desde'
+                : 'Cuenta',
+          ),
           FieldSelector(
             texto: cuenta?.nombreConAviso ?? 'Elige una',
             onTap: () async {
@@ -253,7 +301,9 @@ class _FormularioState extends ConsumerState<_Formulario> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (final c in cuentas)
+                    // Pagando una tarjeta, solo cuentas con dinero de verdad:
+                    // pagar plástico con plástico no es una operación.
+                    for (final c in esPagoDeTarjeta ? liquidas : cuentas)
                       FieldOption(
                         titulo: c.name,
                         detalle: tapar(Money.format(c.balance, c.currency), ocultos),
@@ -274,6 +324,51 @@ class _FormularioState extends ConsumerState<_Formulario> {
               }
             },
           ),
+          const SizedBox(height: Spacing.lg),
+        ],
+
+        // Qué tarjeta se paga, y cuánto llevas usado de ella.
+        //
+        // La barra contesta de un vistazo lo que dos cifras sueltas no: "debes
+        // 1,200 de 5,000" obliga a dividir, y al decidir si pagas todo o una
+        // parte lo que hace falta es cuánto te queda.
+        if (esPagoDeTarjeta) ...[
+          const FieldLabel('Qué tarjeta'),
+          FieldSelector(
+            texto: tarjeta == null
+                ? 'Elige una'
+                : tarjeta.balance < 0
+                ? '${tarjeta.name} · ${Money.format(-tarjeta.balance, tarjeta.currency)} a favor'
+                : '${tarjeta.name} · debes ${Money.format(tarjeta.balance, tarjeta.currency)}',
+            onTap: () async {
+              final elegida = await showAppModal<Account>(
+                context,
+                title: '¿Qué tarjeta vas a pagar?',
+                builder: (context) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final t in tarjetas)
+                      FieldOption(
+                        titulo: t.name,
+                        detalle: t.balance < 0
+                            ? '${Money.format(-t.balance, t.currency)} a favor'
+                            : Money.format(t.balance, t.currency),
+                        seleccionado: t.id == tarjeta?.id,
+                        onTap: () => Navigator.of(context).pop(t),
+                      ),
+                  ],
+                ),
+              );
+              if (elegida != null) setState(() => _tarjetaId = elegida.id);
+            },
+          ),
+          if (tarjeta != null)
+            CupoDeTarjeta(
+              debe: tarjeta.balance,
+              cupo: tarjeta.creditLimit,
+              currency: tarjeta.currency,
+            ),
           const SizedBox(height: Spacing.lg),
         ],
 

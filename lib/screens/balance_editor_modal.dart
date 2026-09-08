@@ -292,6 +292,8 @@ class _NuevaCuenta extends ConsumerStatefulWidget {
 }
 
 class _NuevaCuentaState extends ConsumerState<_NuevaCuenta> {
+  /// El cupo, solo para una tarjeta. Vacío es "no lo dije", que es válido.
+  final _cupo = TextEditingController();
   final _nombre = TextEditingController();
   final _monto = TextEditingController();
   String _tipo = 'CASH';
@@ -322,6 +324,10 @@ class _NuevaCuentaState extends ConsumerState<_NuevaCuenta> {
       await ref.read(apiProvider).post('/accounts', {
         'name': _nombre.text.trim(),
         'type': _tipo,
+        // Solo si se escribió y solo en una tarjeta: sin cupo se ve lo que debes
+        // y no cuánto queda, que es media respuesta pero no una mentira.
+        if (_tipo == 'CREDIT_CARD' && double.tryParse(_cupo.text.replaceAll(',', '')) != null)
+          'creditLimit': double.parse(_cupo.text.replaceAll(',', '')),
         'currentBalance': _montoValido,
         'currency': _moneda ?? user.currency,
         'openedAt': DateTime.now().toIso8601String(),
@@ -381,8 +387,29 @@ class _NuevaCuentaState extends ConsumerState<_NuevaCuenta> {
             if (elegido != null) setState(() => _tipo = elegido);
           },
         ),
+        // Solo en una tarjeta: el cupo no significa nada en una cuenta de
+        // ahorros, y un campo inerte enseña a ignorar los campos.
+        if (_tipo == 'CREDIT_CARD') ...[
+          const SizedBox(height: Spacing.lg),
+          const FieldLabel('Cupo de la tarjeta (opcional)'),
+          FieldBox(
+            child: AppTextField(
+              controller: _cupo,
+              placeholder: '0.00',
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Builder(
+            builder: (context) => Text(
+              'Para poder decirte cuánto te queda, no solo cuánto debes.',
+              style: AppText.tiny(AppTheme.of(context).oliveInk.withValues(alpha: 0.65)),
+            ),
+          ),
+        ],
         const SizedBox(height: Spacing.lg),
-        const FieldLabel('Saldo inicial'),
+        FieldLabel(_tipo == 'CREDIT_CARD' ? 'Lo que debes hoy' : 'Saldo inicial'),
         FieldBox(
           child: Row(
             children: [

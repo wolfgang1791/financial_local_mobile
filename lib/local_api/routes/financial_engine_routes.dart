@@ -126,6 +126,8 @@ void registerFinancialEngineRoutes() {
               'currentBalance': (a['currentBalance'] as num).toDouble(),
               'currency': a['currency'],
               'isHidden': (a['isHidden'] as int) == 1,
+              // El cupo, para decir cuánto queda y no solo cuánto se debe.
+              'creditLimit': (a['creditLimit'] as num?)?.toDouble(),
             },
           )
           .toList(),
