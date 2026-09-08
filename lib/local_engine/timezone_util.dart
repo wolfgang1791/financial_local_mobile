@@ -42,7 +42,13 @@ tz.Location _location(String timeZone) {
     // Mismo fallback que `DEFAULT_TIMEZONE` del backend: una zona que el
     // usuario nunca guardó (o que ya no existe en la base de zonas) no
     // puede tumbar toda pantalla que calcule una fecha.
-    return tz.getLocation('UTC');
+    //
+    // `tz.UTC` y no `getLocation('UTC')`: en la base de zonas esa zona se llama
+    // "Etc/UTC", así que buscarla por "UTC" lanza —y lanzaba **desde dentro del
+    // catch**, que es la peor forma de fallar: el rescate reventaba con el mismo
+    // error que venía a evitar. Con un usuario en UTC, cualquier pantalla que
+    // calculara una fecha se caía entera.
+    return tz.UTC;
   }
 }
 
