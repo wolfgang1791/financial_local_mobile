@@ -1,4 +1,6 @@
 import '../local_engine/ledger.dart' show tiposDeCredito;
+import 'package:flutter/widgets.dart' show Color;
+import '../design/tokens.dart' show AppColors;
 
 /// Los modelos que la app consume.
 ///
@@ -897,3 +899,34 @@ extension EtiquetaDeCuenta on Account {
       ? '$name · no cuenta en tu patrimonio'
       : name;
 }
+
+/// De qué color es cada tipo de cuenta, y con qué ícono se dibuja.
+///
+/// Salen de la **misma paleta que los gráficos**, no de colores inventados para
+/// la lista: así "azul" significa lo mismo en toda la app y la fila de cuentas
+/// conversa con el anillo y con las curvas en vez de competir.
+///
+/// El color es un refuerzo, nunca la información: al lado va el ícono y el
+/// nombre completo. Nadie tiene que aprenderse que el naranja es la tarjeta.
+Color colorDeCuenta(String type, AppColors colors) => switch (type) {
+  // La del día a día, el azul del gasto corriente.
+  'CHECKING' => colors.chartAt(0),
+  // Guardar: el verde azulado, cerca del azul de la corriente pero distinto.
+  'SAVINGS' => colors.chartAt(2),
+  'CASH' => colors.chartAt(5),
+  'INVESTMENT' => colors.chartAt(6),
+  // Naranja y no rojo: el rojo ya significa "gasto" y "peor día" en los
+  // gráficos, y una tarjeta no es una alarma — es otra naturaleza de cuenta.
+  'CREDIT_CARD' || 'LOAN' => colors.chartAt(1),
+  _ => colors.chartOther,
+};
+
+String iconoDeCuenta(String type) => switch (type) {
+  'CHECKING' => '🏦',
+  'SAVINGS' => '🐷',
+  'CASH' => '💵',
+  'INVESTMENT' => '📈',
+  'CREDIT_CARD' => '💳',
+  'LOAN' => '📄',
+  _ => '💼',
+};

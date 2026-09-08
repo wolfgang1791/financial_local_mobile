@@ -160,6 +160,16 @@ class _BotonRegistrar extends StatelessWidget {
 /// La tarjeta de patrimonio: total, el mes, y una cuenta por chip con sus
 /// acciones (corregir saldo, ocultar, borrar). Réplica de `BalanceCard` de la
 /// web.
+/// El resumen de cuentas: cuánto tienes, cómo viene el mes, y qué hay en cada
+/// cuenta con lo que puedes hacerle.
+///
+/// **Una lista y no una placa de tarjeta bancaria.** La placa era un objeto
+/// decorativo haciendo de tablero: encima del degradado había que meter el
+/// total, tres cifras del mes y un chip por cuenta con sus acciones dentro. Con
+/// cuatro cuentas ya no cabía, y el nombre de cada una se cortaba.
+///
+/// Acá cada cuenta es una fila ancha con su saldo y su menú. Aguanta seis
+/// cuentas sin apretarse y el destino de cada acción se lee antes de tocarla.
 class _TarjetaPatrimonio extends ConsumerWidget {
   const _TarjetaPatrimonio({required this.posicion, required this.currency});
 
@@ -172,131 +182,127 @@ class _TarjetaPatrimonio extends ConsumerWidget {
     final neto = posicion.income - posicion.expenses;
     final ocultos = ref.watch(saldosOcultosProvider);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(Spacing.xl),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Radii.lg),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [colors.sageInk, colors.sage],
-            ),
-          ),
-          child: Column(
+    // Las tarjetas viajan con las demás para tener su fila, pero no son
+    // patrimonio: su saldo es lo que debes. Se cuentan aparte, o "4 cuentas"
+    // incluiría una que resta.
+    final liquidas = posicion.accounts.where((c) => !tiposDeCredito.contains(c.type)).toList();
+    final credito = posicion.accounts.where((c) => tiposDeCredito.contains(c.type)).toList();
+    final creditoTotal = credito.fold<double>(0, (a, c) => a + c.currentBalance);
+    final ocultas = liquidas.where((c) => c.isHidden).toList();
+    final ocultasTotal = ocultas.fold<double>(0, (a, c) => a + c.currentBalance);
+    final cuentan = liquidas.length - ocultas.length;
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
                       'PATRIMONIO DISPONIBLE',
-                      style: AppText.kicker(const Color(0xCCFFFFFF)),
+                      style: AppText.kicker(colors.sageInk.withValues(alpha: 0.8)),
                     ),
-                  ),
-                  OjoDeLaTarjeta(
-                    ocultos: ocultos,
-                    onTap: () => ref.read(saldosOcultosProvider.notifier).alternar(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: Spacing.sm),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  tapar(Money.format(posicion.total, currency), ocultos),
-                  style: AppText.money(const Color(0xFFFFFFFF), size: 30, weight: FontWeight.w600),
+                    const SizedBox(height: 3),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        tapar(Money.format(posicion.total, currency), ocultos),
+                        style: AppText.money(colors.foreground, size: 28, weight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: Spacing.lg),
-              Row(
-                children: [
-                  Expanded(
-                    child: _Mini(
-                      rotulo: 'INGRESOS',
-                      valor: tapar(Money.format(posicion.income, currency), ocultos),
-                    ),
-                  ),
-                  Expanded(
-                    child: _Mini(
-                      rotulo: 'GASTOS',
-                      valor: tapar(Money.format(posicion.expenses, currency), ocultos),
-                    ),
-                  ),
-                  Expanded(
-                    child: _Mini(
-                      rotulo: 'NETO',
-                      valor: tapar(Money.signed(neto, currency), ocultos),
-                    ),
-                  ),
-                ],
+              // El ojo, arriba a la derecha: tapa las cifras de toda la app y es
+              // lo único de esta cabecera que no es información.
+              OjoDeLaTarjeta(
+                ocultos: ocultos,
+                onTap: () => ref.read(saldosOcultosProvider.notifier).alternar(),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: Spacing.md),
-        // El rótulo existe porque hay **otra** fila de chips de cuentas en la
-        // app —la de la curva de patrimonio— que se ve casi igual y no guarda
-        // nada. Confundirlas costó caro: quedaron todas las cuentas ocultas, el
-        // patrimonio en cero y el historial vacío, sin nada que dijera por qué.
-        // Cada fila dice ahora lo que hace.
-        Builder(
-          builder: (context) => Text(
-            'QUÉ CUENTAS SUMAN A TU PATRIMONIO · SE GUARDA',
-            style: AppText.kicker(AppTheme.of(context).oliveInk.withValues(alpha: 0.5)),
+          const SizedBox(height: Spacing.sm),
+
+          // El mes, en una línea: qué entró, qué salió y con qué te quedas.
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '+${tapar(Money.format(posicion.income, currency), ocultos)} entró',
+                  style: AppText.small(colors.sageInk),
+                ),
+                TextSpan(
+                  text: '   ·   ',
+                  style: AppText.small(colors.oliveInk.withValues(alpha: 0.3)),
+                ),
+                TextSpan(
+                  text: '−${tapar(Money.format(posicion.expenses, currency), ocultos)} salió',
+                  style: AppText.small(colors.danger),
+                ),
+                TextSpan(
+                  text: '   ·   ',
+                  style: AppText.small(colors.oliveInk.withValues(alpha: 0.3)),
+                ),
+                TextSpan(
+                  text:
+                      '${neto >= 0 ? "▲" : "▼"} neto '
+                      '${tapar(Money.format(neto.abs(), currency), ocultos)}',
+                  style: AppText.small(neto >= 0 ? colors.sageInk : colors.danger),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: Spacing.sm,
-          runSpacing: Spacing.sm,
-          children: [
-            // Las líquidas primero y las tarjetas al final: unas son lo que
-            // tienes y las otras lo que debes, y mezcladas en la misma fila el
-            // ojo las suma sin querer.
-            for (final c in [
-              ...posicion.accounts.where((c) => !tiposDeCredito.contains(c.type)),
-              ...posicion.accounts.where((c) => tiposDeCredito.contains(c.type)),
-            ])
-              _ChipCuenta(cuenta: c),
-            const _ChipAgregarCuenta(),
+
+          // Qué se está sumando, antes de la lista: un total más bajo sin
+          // explicación se lee como plata perdida.
+          if (posicion.accounts.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              [
+                if (cuentan == 0)
+                  'Ninguna cuenta está contando · vuelve a sumar alguna desde su menú'
+                else if (ocultas.isNotEmpty)
+                  'Suma de $cuentan de ${liquidas.length} cuentas · sin '
+                      '${tapar(Money.format(ocultasTotal, currency), ocultos)} que ocultaste'
+                else
+                  'Suma de $cuentan ${cuentan == 1 ? "cuenta" : "cuentas"}',
+                if (credito.isNotEmpty && creditoTotal != 0)
+                  'aparte, ${tapar(Money.format(creditoTotal.abs(), currency), ocultos)} '
+                      'que debes en tarjetas',
+              ].join(' · '),
+              style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.55)),
+            ),
           ],
-        ),
-      ],
+
+          const SizedBox(height: Spacing.md),
+          // Una fila por cuenta. Las líquidas primero y las tarjetas al final:
+          // unas son lo que tienes y las otras lo que debes, y mezcladas el ojo
+          // las suma sin querer.
+          for (final c in [...liquidas, ...credito]) _FilaCuenta(cuenta: c, cuentan: cuentan),
+
+          const SizedBox(height: Spacing.sm),
+          const _ChipAgregarCuenta(),
+        ],
+      ),
     );
   }
 }
 
-class _Mini extends StatelessWidget {
-  const _Mini({required this.rotulo, required this.valor});
-
-  final String rotulo;
-  final String valor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(rotulo, style: AppText.tiny(const Color(0x99FFFFFF))),
-        const SizedBox(height: 2),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(valor, style: AppText.money(const Color(0xFFFFFFFF), size: 13)),
-        ),
-      ],
-    );
-  }
-}
-
-class _ChipCuenta extends ConsumerWidget {
-  const _ChipCuenta({required this.cuenta});
+class _FilaCuenta extends ConsumerWidget {
+  const _FilaCuenta({required this.cuenta, required this.cuentan});
 
   final CashPositionAccount cuenta;
+
+  /// Cuántas cuentas líquidas siguen contando. Con una sola, esa no se puede
+  /// ocultar: sin ninguna el patrimonio va a cero y los movimientos desaparecen
+  /// de todas las listas.
+  final int cuentan;
 
   Account get _comoAccount => Account(
     id: cuenta.id,
@@ -308,11 +314,9 @@ class _ChipCuenta extends ConsumerWidget {
 
   Future<void> _abrirAcciones(BuildContext context, WidgetRef ref) async {
     final colors = AppTheme.of(context);
-    // La única que sigue contando. Quedarse sin ninguna es el estado del que no
-    // se sale sin saber que este menú existe.
-    final cuentan = (ref.read(cashPositionProvider).valueOrNull?.accounts ?? const [])
-        .where((c) => !c.isHidden)
-        .length;
+    // El conteo llega de arriba, que ya lo hizo bien —deja fuera las tarjetas,
+    // que nunca cuentan—. Recalcularlo acá era una segunda verdad que un día
+    // diría otra cosa.
     final esLaUltima = !cuenta.isHidden && cuentan <= 1;
     final accion = await showAppModal<String>(
       context,
@@ -477,56 +481,72 @@ class _ChipCuenta extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = AppTheme.of(context);
-    // La pastilla también es un saldo de la tarjeta: el ojito la tapa con todo
-    // lo demás. Tapar el patrimonio y dejar el saldo de cada cuenta a la vista
-    // deja el interruptor a medias, que es como no tenerlo.
     final ocultos = ref.watch(saldosOcultosProvider);
+    final esCredito = tiposDeCredito.contains(cuenta.type);
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _abrirAcciones(context, ref),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: Spacing.md, vertical: Spacing.sm),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: colors.surface.withValues(alpha: cuenta.isHidden ? 0.5 : 0.92),
-          borderRadius: BorderRadius.circular(Radii.pill),
-          border: Border.all(color: colors.surfaceBorder),
+          border: Border(top: BorderSide(color: colors.foreground.withValues(alpha: 0.06))),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            if (cuenta.isHidden)
+            // La barrita de color dice de qué tipo es la cuenta sin gastar una
+            // palabra. Sale de la misma paleta que los gráficos —no de colores
+            // inventados para acá— así que "azul" significa lo mismo en toda la
+            // app. Es un refuerzo, no la información: al lado va el ícono y
+            // debajo el nombre.
+            Container(
+              width: 3,
+              height: 26,
+              decoration: BoxDecoration(
+                color: colorDeCuenta(
+                  cuenta.type,
+                  colors,
+                ).withValues(alpha: cuenta.isHidden ? 0.3 : 1),
+                borderRadius: BorderRadius.circular(Radii.pill),
+              ),
+            ),
+            const SizedBox(width: Spacing.sm),
+            Text(iconoDeCuenta(cuenta.type), style: AppText.small(colors.foreground)),
+            const SizedBox(width: Spacing.sm),
+            Expanded(
+              child: Text(
+                cuenta.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.body(
+                  colors.foreground.withValues(alpha: cuenta.isHidden ? 0.45 : 1),
+                ).copyWith(decoration: cuenta.isHidden ? TextDecoration.lineThrough : null),
+              ),
+            ),
+            if (esCredito)
               Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: AppIcon(
-                  AppIconData.eyeOff,
-                  size: 13,
-                  color: colors.oliveInk.withValues(alpha: 0.5),
+                padding: const EdgeInsets.only(right: 5),
+                child: Text(
+                  cuenta.currentBalance < 0 ? 'a favor' : 'debes',
+                  style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.5)),
                 ),
               ),
             Text(
-              cuenta.name,
-              style: AppText.small(colors.foreground.withValues(alpha: cuenta.isHidden ? 0.55 : 1)),
-            ),
-            const SizedBox(width: 6),
-            // En una tarjeta el saldo es lo que **debes**, así que se dice: la
-            // misma cifra sin la palabra se lee como plata que tienes.
-            if (tiposDeCredito.contains(cuenta.type))
-              Text('debes ', style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.55))),
-            Text(
               tapar(
                 Money.format(
-                  tiposDeCredito.contains(cuenta.type)
-                      ? cuenta.currentBalance.abs()
-                      : cuenta.currentBalance,
+                  esCredito ? cuenta.currentBalance.abs() : cuenta.currentBalance,
                   cuenta.currency,
                 ),
                 ocultos,
               ),
               style: AppText.money(
-                colors.oliveInk.withValues(alpha: cuenta.isHidden ? 0.45 : 0.7),
-                size: 12,
-              ),
+                colors.foreground.withValues(alpha: cuenta.isHidden ? 0.4 : 1),
+                size: 13.5,
+                weight: FontWeight.w600,
+              ).copyWith(decoration: cuenta.isHidden ? TextDecoration.lineThrough : null),
             ),
+            const SizedBox(width: Spacing.sm),
+            Text('⋮', style: AppText.body(colors.oliveInk.withValues(alpha: 0.45))),
           ],
         ),
       ),

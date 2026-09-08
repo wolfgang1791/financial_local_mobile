@@ -334,35 +334,57 @@ class _FormularioState extends ConsumerState<_Formulario> {
         // parte lo que hace falta es cuánto te queda.
         if (esPagoDeTarjeta) ...[
           const FieldLabel('Qué tarjeta'),
-          FieldSelector(
-            texto: tarjeta == null
-                ? 'Elige una'
-                : tarjeta.balance < 0
-                ? '${tarjeta.name} · ${Money.format(-tarjeta.balance, tarjeta.currency)} a favor'
-                : '${tarjeta.name} · debes ${Money.format(tarjeta.balance, tarjeta.currency)}',
-            onTap: () async {
-              final elegida = await showAppModal<Account>(
-                context,
-                title: '¿Qué tarjeta vas a pagar?',
-                builder: (context) => Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final t in tarjetas)
-                      FieldOption(
-                        titulo: t.name,
-                        detalle: t.balance < 0
-                            ? '${Money.format(-t.balance, t.currency)} a favor'
-                            : Money.format(t.balance, t.currency),
-                        seleccionado: t.id == tarjeta?.id,
-                        onTap: () => Navigator.of(context).pop(t),
+          // Listadas y no en un selector que abre otra pantalla.
+          //
+          // Son dos o tres y cada una lleva la cifra que decide la elección —lo
+          // que debes—. Un selector la esconde: hay que abrirlo para ver los
+          // montos, elegir a ciegas o abrirlo dos veces. Listadas se comparan de
+          // un vistazo y elegir es un toque.
+          for (final t in tarjetas)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() {
+                  _tarjetaId = t.id;
+                  // El monto sigue a la tarjeta: dejar el de la anterior es el
+                  // error más silencioso posible acá.
+                  _monto.text = t.balance > 0 ? t.balance.toStringAsFixed(2) : '';
+                }),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: Spacing.lg, vertical: Spacing.sm),
+                  decoration: BoxDecoration(
+                    color: t.id == tarjeta?.id ? colors.sage.withValues(alpha: 0.14) : null,
+                    borderRadius: BorderRadius.circular(Radii.md),
+                    border: Border.all(
+                      color: t.id == tarjeta?.id
+                          ? colors.sageDark.withValues(alpha: 0.45)
+                          : colors.surfaceBorder,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Text('💳', style: AppText.small(colors.foreground)),
+                      const SizedBox(width: Spacing.sm),
+                      Expanded(
+                        child: Text(
+                          t.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.body(colors.foreground),
+                        ),
                       ),
-                  ],
+                      Text(
+                        t.balance < 0
+                            ? '${Money.format(-t.balance, t.currency)} a favor'
+                            : 'debes ${Money.format(t.balance, t.currency)}',
+                        style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.7)),
+                      ),
+                    ],
+                  ),
                 ),
-              );
-              if (elegida != null) setState(() => _tarjetaId = elegida.id);
-            },
-          ),
+              ),
+            ),
           if (tarjeta != null)
             CupoDeTarjeta(
               debe: tarjeta.balance,
