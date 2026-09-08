@@ -266,7 +266,7 @@ class _TarjetaPatrimonio extends ConsumerWidget {
             Text(
               [
                 if (cuentan == 0)
-                  'Ninguna cuenta está contando · vuelve a sumar alguna desde su menú'
+                  'Ninguna cuenta está contando · toca «no visible» en alguna para volver a sumarla'
                 else if (ocultas.isNotEmpty)
                   'Suma de $cuentan de ${liquidas.length} cuentas · sin '
                       '${tapar(Money.format(ocultasTotal, currency), ocultos)} que ocultaste'
@@ -446,9 +446,11 @@ class _FilaCuenta extends ConsumerWidget {
   /// sin abrir nada y se cambia con un toque.
   Widget _pastillaContar(BuildContext context, WidgetRef ref, AppColors colors, bool esCredito) {
     final off = cuenta.isHidden;
-    // Una tarjeta nunca suma al patrimonio, así que acá la pregunta es otra: si
-    // se ve o no en las listas. Decirle "cuenta" sería mentirle.
-    final texto = esCredito ? (off ? 'oculta' : 'visible') : (off ? 'no cuenta' : 'cuenta');
+    // "Visible" y no "cuenta": es la misma palabra para todas las cuentas. Una
+    // tarjeta nunca suma al patrimonio —decirle "cuenta" sería mentirle— y en el
+    // resto, dejar de contar es exactamente dejar de verse en los totales, la
+    // curva y el historial.
+    final texto = off ? 'no visible' : 'visible';
     // La última que cuenta no se puede apagar: sin ninguna el patrimonio va a
     // cero y los movimientos desaparecen de todas las listas —el historial
     // filtra por cuentas que cuentan—, así que la app entera se apaga sin decir
