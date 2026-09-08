@@ -712,6 +712,15 @@ class _Alternador extends StatelessWidget {
 
 // ── Patrimonio ────────────────────────────────
 
+/// El patrimonio de Panorama: la misma información de siempre —cuánto tienes,
+/// qué entró y qué salió— pero con la ropa del resto de la app.
+///
+/// Antes era una placa con degradado haciendo de tarjeta de banco. Una tarjeta
+/// de banco es un objeto: dice "esto es plástico, esto es una cuenta". Acá
+/// arriba lo que hay no es una cuenta sino **la respuesta** —cuánto tienes—, y
+/// el degradado la separaba del resto de la pantalla como si fuera de otra app.
+/// Sobre la misma superficie que todo lo demás, la cifra manda por tamaño y no
+/// por color, y se lee de corrido con las tarjetas de abajo.
 class _TarjetaSaldo extends ConsumerWidget {
   const _TarjetaSaldo({required this.posicion, required this.currency});
 
@@ -722,27 +731,37 @@ class _TarjetaSaldo extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = AppTheme.of(context);
     final ocultos = ref.watch(saldosOcultosProvider);
-    return Container(
-      padding: const EdgeInsets.all(Spacing.xl),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(Radii.lg),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [colors.sageInk, colors.sage],
-        ),
-      ),
+    final neto = posicion.income - posicion.expenses;
+
+    return AppCard(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  'PATRIMONIO DISPONIBLE',
-                  style: AppText.kicker(const Color(0xCCFFFFFF)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PATRIMONIO DISPONIBLE',
+                      style: AppText.kicker(colors.sageInk.withValues(alpha: 0.8)),
+                    ),
+                    const SizedBox(height: 3),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        tapar(Money.format(posicion.total, currency), ocultos),
+                        style: AppText.money(colors.foreground, size: 26, weight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              // El ojo tapa las cifras de toda la app: es lo único de esta
+              // cabecera que no es información.
               OjoDeLaTarjeta(
                 ocultos: ocultos,
                 onTap: () => ref.read(saldosOcultosProvider.notifier).alternar(),
@@ -750,57 +769,38 @@ class _TarjetaSaldo extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: Spacing.sm),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              tapar(Money.format(posicion.total, currency), ocultos),
-              style: AppText.money(const Color(0xFFFFFFFF), size: 30, weight: FontWeight.w600),
+
+          // El mes en una línea, igual que en Movimientos: qué entró, qué salió
+          // y con qué te quedas. Dos rótulos en mayúsculas con sus cifras
+          // ocupaban el doble para decir lo mismo, y el neto —que es lo que uno
+          // busca— había que sacarlo de cabeza.
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '+${tapar(Money.format(posicion.income, currency), ocultos)} entró',
+                  style: AppText.small(colors.sageInk),
+                ),
+                TextSpan(
+                  text: '   ·   ',
+                  style: AppText.small(colors.oliveInk.withValues(alpha: 0.3)),
+                ),
+                TextSpan(
+                  text: '−${tapar(Money.format(posicion.expenses, currency), ocultos)} salió',
+                  style: AppText.small(colors.danger),
+                ),
+                TextSpan(
+                  text: '   ·   ',
+                  style: AppText.small(colors.oliveInk.withValues(alpha: 0.3)),
+                ),
+                TextSpan(
+                  text:
+                      '${neto >= 0 ? "▲" : "▼"} neto '
+                      '${tapar(Money.format(neto.abs(), currency), ocultos)}',
+                  style: AppText.small(neto >= 0 ? colors.sageInk : colors.danger),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: Spacing.md),
-          Row(
-            children: [
-              _Mini(
-                rotulo: 'INGRESOS DEL MES',
-                valor: tapar(Money.signed(posicion.income, currency), ocultos),
-              ),
-              const SizedBox(width: Spacing.xl),
-              _Mini(
-                rotulo: 'GASTOS DEL MES',
-                valor: tapar(Money.signed(-posicion.expenses, currency), ocultos),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Mini extends StatelessWidget {
-  const _Mini({required this.rotulo, required this.valor});
-
-  final String rotulo;
-  final String valor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Flexible(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            rotulo,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppText.kicker(const Color(0x99FFFFFF)).copyWith(fontSize: 9),
-          ),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(valor, style: AppText.money(const Color(0xFFFFFFFF), size: 13.5)),
           ),
         ],
       ),
