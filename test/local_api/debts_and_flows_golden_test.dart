@@ -44,7 +44,7 @@ void main() {
       expect(r.length, 4);
 
       final prestamo = r.firstWhere((d) => d['debtTypeCode'] == 'PERSONAL_LOAN');
-      expect((prestamo['currentBalance'] as num).toDouble(), 93199.41);
+      expect((prestamo['currentBalance'] as num).toDouble(), 92665.67);
       expect(prestamo['statusThisMonth'], 'PENDING');
       // Los meses que pasaron sin pagar se acumulan solos, así que la lista
       // vacía no era un valor de oro: estaba escrita `isEmpty` y bastó que
@@ -57,19 +57,19 @@ void main() {
         expect((mes as String).compareTo(mesActual), lessThan(0), reason: '$mes ya pasó');
       }
       expect((prestamo['pendingThisMonth'] as num).toDouble(), 1694.77);
-      expect((prestamo['installmentInterest'] as num).toDouble(), 1016.33);
-      expect((prestamo['interestPendingThisMonth'] as num).toDouble(), 1016.33);
+      expect((prestamo['installmentInterest'] as num).toDouble(), 1044.38);
+      expect((prestamo['interestPendingThisMonth'] as num).toDouble(), 1044.38);
       expect((prestamo['installmentAmount'] as num).toDouble(), 1694.77);
-      expect((prestamo['scheduledInstallment'] as num).toDouble(), 1510.64);
+      expect((prestamo['scheduledInstallment'] as num).toDouble(), 1501.99);
       expect(prestamo['remainingInstallments'], 1);
       expect((prestamo['account'] as Map)['name'], 'prestamo gigante');
       expect((prestamo['debtKind'] as Map)['label'], 'Préstamo bancario');
     },
   );
 
-  test('GET /recurring-flows — mismos 14 flujos, mismo orden, mismas fechas derivadas', () async {
+  test('GET /recurring-flows — mismos flujos, mismo orden, mismas fechas derivadas', () async {
     final r = await api.get('/recurring-flows') as List;
-    expect(r.length, 14);
+    expect(r.length, 15);
 
     // Orden: por monto de mayor a menor. "Sueldo" es el más grande de todos.
     expect(r[0]['name'], 'Sueldo');
@@ -93,7 +93,7 @@ void main() {
       );
     }
 
-    venceElDia(r[0]['nextDueDate'], 28);
+    venceElDia(r[0]['nextDueDate'], 30);
 
     final alquiler = r.firstWhere((f) => f['name'] == 'Alquiler');
     expect((alquiler['amount'] as num).toDouble(), 1700);

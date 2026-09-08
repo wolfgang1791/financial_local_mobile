@@ -36,7 +36,13 @@ void main() {
     final despues =
         (cuentasDespues.firstWhere((c) => c['id'] == sueldo['accountId'])['currentBalance'] as num)
             .toDouble();
-    expect(despues, closeTo(antes + (sueldo['amount'] as num).toDouble(), 0.001));
+    // El monto del mes, no el del flujo: cada mes hereda el del anterior, así
+    // que el sueldo de este mes puede no ser el que el flujo trae escrito —y era
+    // por esa diferencia por la que fallaba, sin que nada estuviera mal.
+    final mesEnCurso = (await hoyDelUsuario()).substring(0, 7);
+    final montoDelMes = (((sueldo['months'] as Map)[mesEnCurso] as Map)['amount'] as num)
+        .toDouble();
+    expect(despues, closeTo(antes + montoDelMes, 0.001));
 
     final flujosDespues = await api.get('/recurring-flows') as List;
     final sueldoDespues = flujosDespues.firstWhere((f) => f['id'] == sueldo['id']);

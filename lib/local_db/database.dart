@@ -17,7 +17,19 @@ import '../local_engine/user_clock.dart';
 /// encuentran ya copiada y no la vuelven a tocar: lo que el usuario
 /// registre en esta app vive en esa copia, no en el asset original.
 abstract final class LocalDatabase {
-  static const _nombreArchivo = 'financial_strategist_local.db';
+  /// El archivo local, con su versión en el nombre.
+  ///
+  /// La semilla solo se copia cuando el archivo **no existe**, así que subir la
+  /// versión es la única forma de que una semilla nueva llegue a un teléfono que
+  /// ya tiene la app: sin nombre nuevo se quedaría con la base de la instalación
+  /// original para siempre.
+  ///
+  /// Subirla también **descarta lo que haya en el teléfono** y arranca de la
+  /// copia recién traída de la web. Es a propósito —las dos bases no se
+  /// sincronizan, y cuando hay que reconciliarlas gana la web— pero es la razón
+  /// por la que esto se sube a mano y solo al regenerar la semilla
+  /// (`tool/regenerar_semilla.mjs`), nunca de rutina.
+  static const _nombreArchivo = 'financial_strategist_local_v2.db';
   static Database? _abierta;
 
   /// La apertura **en curso**, no la base ya abierta.

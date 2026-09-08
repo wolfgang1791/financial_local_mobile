@@ -24,8 +24,17 @@ void main() {
 
   tearDown(() => tmp.delete(recursive: true));
 
-  Future<List<Map<String, dynamic>>> cuentas() async =>
-      (await api.get('/accounts') as List).cast<Map<String, dynamic>>();
+  /// Solo cuentas donde el saldo es lo que **tienes**.
+  ///
+  /// La lista trae también las tarjetas de uso diario, y ahí el saldo es lo que
+  /// debes: un gasto lo sube en vez de bajarlo. Lo que se prueba acá es que el
+  /// movimiento arrastre el saldo, no el signo del crédito —eso tiene su
+  /// propio test— y con una tarjeta de destino la aserción decía lo contrario
+  /// de lo que quería decir.
+  Future<List<Map<String, dynamic>>> cuentas() async => (await api.get('/accounts') as List)
+      .cast<Map<String, dynamic>>()
+      .where((c) => c['type'] != 'CREDIT_CARD' && c['type'] != 'LOAN')
+      .toList();
 
   test('el movimiento vuelve diciendo en qué cuenta cayó', () async {
     final destino = (await cuentas()).last;

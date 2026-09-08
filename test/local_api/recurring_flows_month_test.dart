@@ -30,14 +30,40 @@ void main() {
     return lista.cast<Map<String, dynamic>>().firstWhere((f) => f['id'] == id);
   }
 
+  /// Un flujo sin ningún mes registrado, con cuenta.
+  ///
+  /// Si la semilla no tiene ninguno se crea uno. La semilla son datos reales del
+  /// usuario, y ahí todos los flujos terminan teniendo meses marcados: depender
+  /// de que quedara uno virgen hacía que el archivo entero dejara de correr al
+  /// traer datos nuevos, sin que nada del código hubiera cambiado.
   Future<Map<String, dynamic>> unFlujoSinPagos({bool? gasto}) async {
     final lista = await api.get('/recurring-flows') as List;
-    return lista.cast<Map<String, dynamic>>().firstWhere(
+    final yaHay = lista.cast<Map<String, dynamic>>().where(
       (f) =>
           (f['paidMonths'] as List).isEmpty &&
           f['accountId'] != null &&
           (gasto == null || (f['type'] == 'EXPENSE') == gasto),
     );
+    if (yaHay.isNotEmpty) return yaHay.first;
+
+    // Nunca sobre una tarjeta: ahí el saldo es lo que debes y estos tests miran
+    // el patrimonio.
+    final cuenta = (await api.get('/accounts') as List).cast<Map<String, dynamic>>().firstWhere(
+      (c) => const {'CHECKING', 'SAVINGS', 'CASH'}.contains(c['type']),
+    );
+    final mes = (await hoyDelUsuario()).substring(0, 7);
+    final creado =
+        await api.post('/recurring-flows', {
+              'name': 'Flujo de prueba ${DateTime.now().microsecondsSinceEpoch}',
+              'type': (gasto ?? true) ? 'EXPENSE' : 'INCOME',
+              'amount': 120.0,
+              'frequency': 'MONTHLY',
+              'accountId': cuenta['id'],
+              'startDate': '2026-01-01',
+              'nextDueDate': '$mes-15',
+            })
+            as Map<String, dynamic>;
+    return flujoPorId(creado['id'] as String);
   }
 
   test('la lista dice qué meses tienen registro, no solo el de hoy', () async {

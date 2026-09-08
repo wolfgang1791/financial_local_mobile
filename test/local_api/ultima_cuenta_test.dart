@@ -30,18 +30,39 @@ void main() {
   Future<List<Map<String, dynamic>>> cuentas() async =>
       (await api.get('/accounts') as List).cast<Map<String, dynamic>>();
 
+  /// Las que cuentan para el patrimonio: las líquidas visibles. Una tarjeta
+  /// nunca cuenta —su saldo es lo que debes— así que ocultarla no acerca a nadie
+  /// al candado, y meterla en la cuenta lo disparaba una cuenta antes de tiempo.
+  Future<List<Map<String, dynamic>>> liquidas() async => (await cuentas())
+      .where((c) => const {'CHECKING', 'SAVINGS', 'CASH'}.contains(c['type']))
+      .toList();
+
   Future<int> cuantasCuentan() async =>
-      (await cuentas()).where((c) => c['isHidden'] == false).length;
+      (await liquidas()).where((c) => c['isHidden'] == false).length;
+
+  /// Todas visibles antes de empezar.
+  ///
+  /// La semilla son datos reales, y ahí puede haber cuentas ya ocultas —hoy hay
+  /// dos—. Sin esto el escenario arrancaba con una sola contando y el primer
+  /// paso del test chocaba con el candado que el test viene a probar.
+  Future<void> mostrarTodas() async {
+    for (final c in await cuentas()) {
+      if (c['isHidden'] == true) {
+        await api.patch('/accounts/${c['id']}', {'isHidden': false});
+      }
+    }
+  }
 
   test('se pueden ocultar todas menos una', () async {
-    final visibles = (await cuentas()).where((c) => c['isHidden'] == false).toList();
+    await mostrarTodas();
+    final visibles = (await liquidas()).where((c) => c['isHidden'] == false).toList();
     // Se ocultan todas menos la última, que sí debe dejarse.
     for (final c in visibles.take(visibles.length - 1)) {
       await api.patch('/accounts/${c['id']}', {'isHidden': true});
     }
     expect(await cuantasCuentan(), 1);
 
-    final ultima = (await cuentas()).firstWhere((c) => c['isHidden'] == false);
+    final ultima = (await liquidas()).firstWhere((c) => c['isHidden'] == false);
     await expectLater(
       api.patch('/accounts/${ultima['id']}', {'isHidden': true}),
       throwsA(isA<ApiException>()),
@@ -50,11 +71,12 @@ void main() {
   });
 
   test('con la última a salvo, el patrimonio y los movimientos nunca quedan en cero', () async {
-    final visibles = (await cuentas()).where((c) => c['isHidden'] == false).toList();
+    await mostrarTodas();
+    final visibles = (await liquidas()).where((c) => c['isHidden'] == false).toList();
     for (final c in visibles.take(visibles.length - 1)) {
       await api.patch('/accounts/${c['id']}', {'isHidden': true});
     }
-    final ultima = (await cuentas()).firstWhere((c) => c['isHidden'] == false);
+    final ultima = (await liquidas()).firstWhere((c) => c['isHidden'] == false);
     try {
       await api.patch('/accounts/${ultima['id']}', {'isHidden': true});
     } on ApiException {

@@ -30,21 +30,27 @@ void main() {
 
   tearDown(() => tmp.delete(recursive: true));
 
-  test('GET /accounts — mismas 2 cuentas líquidas que el backend real', () async {
+  test('GET /accounts — mismas cuentas que el backend real', () async {
     final r = await api.get('/accounts') as List;
-    expect(r.length, 2);
+    expect(r.length, 4);
 
     final principal = r.firstWhere((a) => a['name'] == 'Cuenta principal');
     expect(principal['type'], 'CHECKING');
-    expect((principal['currentBalance'] as num).toDouble(), 1408.97);
+    expect((principal['currentBalance'] as num).toDouble(), 1931.45);
     expect(principal['isHidden'], false);
 
-    final sip = r.firstWhere((a) => a['name'] == 'sip');
-    expect(sip['type'], 'SAVINGS');
-    expect((sip['currentBalance'] as num).toDouble(), 207.2);
     // `/accounts` no filtra ocultas —eso lo hace `accountsProvider` en la
-    // app—, así que "sip" tiene que seguir viniendo con `isHidden: true`.
-    expect(sip['isHidden'], true);
+    // app—, así que las de ahorro tienen que seguir viniendo con `isHidden`.
+    final ahorro = r.firstWhere((a) => a['name'] == 'Ahorro falabella');
+    expect(ahorro['type'], 'SAVINGS');
+    expect((ahorro['currentBalance'] as num).toDouble(), 2967.94);
+    expect(ahorro['isHidden'], true);
+
+    // La tarjeta de uso diario viaja con las demás: no es el espejo de una
+    // deuda, así que se puede gastar y pagar con ella desde los mismos sitios.
+    final cmr = r.firstWhere((a) => a['name'] == 'CMR');
+    expect(cmr['type'], 'CREDIT_CARD');
+    expect((cmr['currentBalance'] as num).toDouble(), 38.70);
   });
 
   test('GET /currencies — mismas 3 monedas activas, mismo orden', () async {
@@ -56,29 +62,20 @@ void main() {
 
   test('GET /transactions?take=1000 — mismo total y mismas sumas que el backend real', () async {
     final r = await api.get('/transactions?take=1000') as Map;
-    // `/accounts` no filtra ocultas, pero `/transactions` sí excluye las de
-    // una cuenta oculta ("sip") — por eso 121 y no las 125 filas que hay en
-    // la tabla entera.
-    //
-    // Cuatro más que el golden original, y las cuatro por una migración:
-    // el par de ajustes del colchón de julio (se ven en la lista pero no
-    // suman en `totals`) y el pago de Netflix del 27 con su contrapartida,
-    // que `_igualarConLaWeb` trae porque la web sí lo tenía.
-    expect(r['total'], 121);
+    // `/accounts` no filtra ocultas, pero `/transactions` sí excluye las de una
+    // cuenta oculta: por eso son menos filas que las que hay en la tabla entera.
+    expect(r['total'], 177);
     final totals = r['totals'] as Map;
-    expect((totals['income'] as num).toDouble(), 8349.31);
-    // 55.90 más que antes: el pago de Netflix de julio que trajo la
-    // unificación con la web. Su contrapartida no suma acá —es un ajuste— así
-    // que la diferencia es exactamente el pago.
-    expect((totals['expense'] as num).toDouble(), 10023.87);
+    expect((totals['income'] as num).toDouble(), 19706.14);
+    expect((totals['expense'] as num).toDouble(), 17075.42);
 
     // Las tres más recientes, con su `balanceBefore` reconstruido — el
     // mismo que calculó `TransactionsService.balancesBefore` en el backend
     // real para esta misma cuenta y este mismo ledger.
     final items = r['items'] as List;
-    expect((items[0]['balanceBefore'] as num).toDouble(), 1408.97);
-    expect((items[1]['balanceBefore'] as num).toDouble(), 1422.77);
-    expect((items[2]['balanceBefore'] as num).toDouble(), 1462.77);
+    expect((items[0]['balanceBefore'] as num).toDouble(), 2018.58);
+    expect((items[1]['balanceBefore'] as num).toDouble(), 2008.58);
+    expect((items[2]['balanceBefore'] as num).toDouble(), 2067.18);
   });
 
   test('GET /categories — trae el "general" de una categoría con hijas', () async {

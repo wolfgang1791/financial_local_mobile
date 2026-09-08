@@ -68,7 +68,10 @@ void main() {
     expect(resultado['unlinkedTransactions'], 1);
     expect((await todas()).any((c) => c['id'] == creada['id']), isFalse);
 
-    final movimientos = (await api.get('/transactions?take=50') as Map)['items'] as List;
+    // Con `take` corto el movimiento de prueba —fechado en agosto— se quedaba
+    // fuera de la página: la base tiene más filas nuevas que antes y la lista
+    // viene del más nuevo al más viejo.
+    final movimientos = (await api.get('/transactions?take=500') as Map)['items'] as List;
     final huerfano = movimientos.cast<Map<String, dynamic>>().firstWhere(
       (t) => t['detail'] == 'una prueba',
     );

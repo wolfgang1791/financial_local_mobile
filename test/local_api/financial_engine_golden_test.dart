@@ -1,5 +1,12 @@
-// Valores de oro para la Fase 4 — comparados contra el backend NestJS/
-// Postgres vivo, mismo usuario, mismo instante.
+// Valores de oro — comparados contra el backend NestJS/Postgres vivo, mismo
+// usuario, mismo instante.
+//
+// Salen de la semilla, así que se rehacen cuando la semilla se rehace
+// (`tool/regenerar_semilla.mjs`): son la prueba de que el motor en Dart contesta
+// lo mismo que el de Nest sobre los mismos datos, y para eso los números tienen
+// que venir del backend, nunca de este motor.
+//
+// Última toma: 08/09/2026, con la semilla traída ese día.
 
 import 'dart:io';
 
@@ -24,8 +31,8 @@ void main() {
 
   test('GET /financial-engine/safe-to-spend — mismos números que el backend real', () async {
     final r = await api.get('/financial-engine/safe-to-spend') as Map;
-    expect((r['liquidAssets'] as num).toDouble(), 1408.97);
-    expect((r['upcomingExpenses'] as num).toDouble(), 2066.25);
+    expect((r['liquidAssets'] as num).toDouble(), 1931.45);
+    expect((r['upcomingExpenses'] as num).toDouble(), 1955.70);
     // El horizonte es el próximo ingreso de la base sembrada, y esa fecha no se
     // mueve: es el valor de oro. Lo que sí cambia todos los días es la cuenta
     // atrás hasta ella, así que se comprueba contra la fecha en vez de tener el
@@ -40,12 +47,18 @@ void main() {
 
   test('GET /financial-engine/cash-position — mismo total, mismas cuentas, mismo mes', () async {
     final r = await api.get('/financial-engine/cash-position') as Map;
-    expect((r['total'] as num).toDouble(), 1408.97);
+    expect((r['total'] as num).toDouble(), 1931.45);
 
+    // Cuatro cuentas, y el total es solo la que cuenta: las dos de ahorro están
+    // ocultas y la tarjeta nunca suma —su saldo es lo que debes—.
     final cuentas = r['accounts'] as List;
-    expect(cuentas.length, 2);
-    final sip = cuentas.firstWhere((c) => c['name'] == 'sip');
-    expect(sip['isHidden'], true);
+    expect(cuentas.length, 4);
+    expect(
+      cuentas.where((c) => c['isHidden'] == true).map((c) => c['name']),
+      containsAll(['Ahorro falabella', 'Cerdo Saldo']),
+    );
+    final tarjeta = cuentas.firstWhere((c) => c['type'] == 'CREDIT_CARD');
+    expect((tarjeta['currentBalance'] as num).toDouble(), 38.70);
 
     // El mes que devuelve es el **en curso**, así que su clave y sus cifras
     // cambian solas al pasar de mes. Estaba escrito '2026-08' con las cifras de
@@ -72,19 +85,14 @@ void main() {
     expect(r.last['month'], (await hoyDelUsuario()).substring(0, 7));
 
     final julio = r.firstWhere((p) => p['month'] == '2026-07');
-    expect((julio['liquid'] as num).toDouble(), 2629.13);
-    expect((julio['income'] as num).toDouble(), 8349.31);
-    // 8,836.54, que es exactamente lo que dice la web para julio: la base
-    // sembrada no tenía el pago de Netflix del 27 y `_igualarConLaWeb` lo trae.
+    expect((julio['liquid'] as num).toDouble(), 2525.29);
+    expect((julio['income'] as num).toDouble(), 11559.31);
     expect((julio['expenses'] as num).toDouble(), 8836.54);
     expect(julio['inProgress'], false);
 
-    // Agosto cerró en el mismo saldo con el que se lo veía en curso: la base
-    // sembrada no tiene movimientos posteriores, así que cerrar el mes no lo
-    // movió — lo que cambió es que ya no está en curso.
     final agosto = r.firstWhere((p) => p['month'] == '2026-08');
-    expect((agosto['liquid'] as num).toDouble(), 1408.97);
-    expect((agosto['delta'] as num).toDouble(), closeTo(-1220.16, 0.01));
+    expect((agosto['liquid'] as num).toDouble(), 2427.46);
+    expect((agosto['delta'] as num).toDouble(), closeTo(-97.83, 0.01));
   });
 
   test(
@@ -99,21 +107,19 @@ void main() {
       expect(r.last['date'], await hoyDelUsuario());
       expect(r.length, _diasEntre(_primerRegistroSembrado, r.last['date'] as String) + 1);
 
-      expect((r.last['liquid'] as num).toDouble(), 1408.97);
-      expect((r.last['moved'] as num).toDouble(), 0);
+      expect((r.last['liquid'] as num).toDouble(), 1931.45);
 
       // Un día concreto del pasado sí es un valor de oro: ya cerró y no puede
       // cambiar.
       final dia14 = r.firstWhere((p) => p['date'] == '2026-08-14');
-      expect((dia14['liquid'] as num).toDouble(), 1462.77);
+      expect((dia14['liquid'] as num).toDouble(), 1358.93);
       expect((dia14['moved'] as num).toDouble(), -68);
     },
   );
 }
 
-// El próximo ingreso de la base sembrada — medianoche del 28 de agosto en la
-// zona del usuario.
-final _horizonteSembrado = DateTime.utc(2026, 8, 28, 5);
+// El próximo ingreso de la base sembrada, en la zona del usuario.
+final _horizonteSembrado = DateTime.utc(2026, 7, 30, 5);
 
 // El día del primer movimiento de la base sembrada.
 const _primerRegistroSembrado = '2026-07-02';

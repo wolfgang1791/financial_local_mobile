@@ -28,9 +28,16 @@ void main() {
   Future<List<Map<String, dynamic>>> curva() async =>
       (await api.get('/financial-engine/net-worth-daily') as List).cast<Map<String, dynamic>>();
 
+  /// Las cuentas que la curva puede dibujar: las líquidas.
+  ///
+  /// El desglose por cuenta solo trae esas —lo que debes en una tarjeta no es
+  /// patrimonio— así que buscar una tarjeta en él devolvía nulo. Es la misma
+  /// regla que el filtro de cuentas del gráfico.
   Future<List<Map<String, dynamic>>> cuentas() async =>
       ((await api.get('/financial-engine/cash-position') as Map)['accounts'] as List)
-          .cast<Map<String, dynamic>>();
+          .cast<Map<String, dynamic>>()
+          .where((c) => const {'CHECKING', 'SAVINGS', 'CASH'}.contains(c['type']))
+          .toList();
 
   test('la suma de las cuentas que cuentan es exactamente el total del día', () async {
     final contadas = (await cuentas())

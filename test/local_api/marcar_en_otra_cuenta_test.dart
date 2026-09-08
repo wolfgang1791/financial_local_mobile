@@ -25,8 +25,13 @@ void main() {
 
   tearDown(() => tmp.delete(recursive: true));
 
-  Future<List<Map<String, dynamic>>> cuentas() async =>
-      (await api.get('/accounts') as List).cast<Map<String, dynamic>>();
+  /// Solo cuentas donde el saldo es lo que **tienes**: un cobro que cae en una
+  /// tarjeta no la sube, baja lo que debes, y lo que se prueba acá es a qué
+  /// cuenta va la plata, no el signo del crédito.
+  Future<List<Map<String, dynamic>>> cuentas() async => (await api.get('/accounts') as List)
+      .cast<Map<String, dynamic>>()
+      .where((c) => c['type'] != 'CREDIT_CARD' && c['type'] != 'LOAN')
+      .toList();
 
   double saldo(List<Map<String, dynamic>> lista, String id) =>
       (lista.firstWhere((c) => c['id'] == id)['currentBalance'] as num).toDouble();

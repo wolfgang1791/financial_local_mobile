@@ -30,15 +30,17 @@ void main() {
     () async {
       final deudas = await api.get('/debts') as List;
       final prestamo = deudas.firstWhere((d) => d['debtTypeCode'] == 'PERSONAL_LOAN');
-      // Ya verificado contra el backend real en la Fase 2. La cuota que se
-      // cobra de verdad (`installmentAmount`, la declarada por el usuario:
-      // 1694.77) es más alta que la que proyectó el cronograma
-      // (`scheduledInstallment`: 1510.64) — así que después de cubrir el
-      // interés del período (`installmentInterest`: 1016.33), el sobrante va
-      // entero a capital: más de lo que el cronograma habría amortizado solo.
-      expect((prestamo['installmentInterest'] as num).toDouble(), 1016.33);
+      // Verificado contra el backend real. La cuota que se cobra de verdad
+      // (`installmentAmount`, la declarada por el usuario: 1694.77) es más alta
+      // que la que proyectó el cronograma — así que después de cubrir el interés
+      // del período (`installmentInterest`), el sobrante va entero a capital:
+      // más de lo que el cronograma habría amortizado solo.
+      //
+      // El interés se recalcula con el saldo de hoy, así que se lee de la deuda
+      // en vez de escribirlo: escrito a mano, el test envejecía con cada pago.
       expect((prestamo['installmentAmount'] as num).toDouble(), 1694.77);
-      final capitalEsperado = 1694.77 - 1016.33;
+      final interes = (prestamo['installmentInterest'] as num).toDouble();
+      final capitalEsperado = 1694.77 - interes;
 
       final balanceAntes = (prestamo['currentBalance'] as num).toDouble();
       final cuentas = await api.get('/accounts') as List;
@@ -54,7 +56,7 @@ void main() {
 
       // Interés antes que capital: primero se cubre exactamente el interés
       // del período calculado por el cronograma, nunca más ni menos.
-      expect((resultado['interest'] as num).toDouble(), closeTo(1016.33, 0.01));
+      expect((resultado['interest'] as num).toDouble(), closeTo(interes, 0.01));
       expect((resultado['principal'] as num).toDouble(), closeTo(capitalEsperado, 0.01));
       expect(resultado['covered'], true);
 
