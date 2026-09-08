@@ -213,7 +213,7 @@ class _TarjetaPatrimonio extends ConsumerWidget {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         tapar(Money.format(posicion.total, currency), ocultos),
-                        style: AppText.money(colors.foreground, size: 28, weight: FontWeight.w700),
+                        style: AppText.money(colors.foreground, size: 24, weight: FontWeight.w700),
                       ),
                     ),
                   ],
@@ -281,10 +281,61 @@ class _TarjetaPatrimonio extends ConsumerWidget {
           ],
 
           const SizedBox(height: Spacing.md),
-          // Una fila por cuenta. Las líquidas primero y las tarjetas al final:
-          // unas son lo que tienes y las otras lo que debes, y mezcladas el ojo
-          // las suma sin querer.
-          for (final c in [...liquidas, ...credito]) _FilaCuenta(cuenta: c, cuentan: cuentan),
+          // Un bloque por grupo: en el banco, efectivo, inversión y crédito,
+          // cada uno con su subtotal.
+          //
+          // Agrupado y no una lista corrida porque lo que **tienes** y lo que
+          // **debes** no se suman, y mezclados en una sola columna el ojo los
+          // suma sin querer. El subtotal de cada grupo es la cifra que uno busca
+          // —"cuánto tengo en el banco"— y que antes había que sacar sumando
+          // filas.
+          for (final (grupo, etiqueta) in gruposDeCuenta)
+            Builder(
+              builder: (context) {
+                final delGrupo = [
+                  ...liquidas,
+                  ...credito,
+                ].where((c) => grupoDeCuenta(c.type) == grupo).toList();
+                if (delGrupo.isEmpty) return const SizedBox.shrink();
+                final esCredito = grupo == GrupoDeCuenta.credito;
+                final subtotal = delGrupo
+                    .where((c) => esCredito || !c.isHidden)
+                    .fold<double>(0, (a, c) => a + c.currentBalance);
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: Spacing.sm),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            esCredito
+                                ? '${etiqueta.toUpperCase()} · NO SUMA A TU PATRIMONIO'
+                                : etiqueta.toUpperCase(),
+                            style: AppText.kicker(colors.sageInk.withValues(alpha: 0.8)),
+                          ),
+                        ),
+                        Text(
+                          (esCredito && subtotal != 0
+                                  ? (subtotal > 0 ? 'debes ' : 'a favor ')
+                                  : '') +
+                              tapar(Money.format(subtotal.abs(), currency), ocultos),
+                          style: AppText.money(
+                            esCredito ? colors.oliveInk.withValues(alpha: 0.75) : colors.foreground,
+                            size: 12.5,
+                            weight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    for (final c in delGrupo) _FilaCuenta(cuenta: c, cuentan: cuentan),
+                  ],
+                );
+              },
+            ),
 
           const SizedBox(height: Spacing.sm),
           const _ChipAgregarCuenta(),
@@ -314,10 +365,6 @@ class _FilaCuenta extends ConsumerWidget {
 
   Future<void> _abrirAcciones(BuildContext context, WidgetRef ref) async {
     final colors = AppTheme.of(context);
-    // El conteo llega de arriba, que ya lo hizo bien —deja fuera las tarjetas,
-    // que nunca cuentan—. Recalcularlo acá era una segunda verdad que un día
-    // diría otra cosa.
-    final esLaUltima = !cuenta.isHidden && cuentan <= 1;
     final accion = await showAppModal<String>(
       context,
       title: cuenta.name,
@@ -348,16 +395,6 @@ class _FilaCuenta extends ConsumerWidget {
             subtitulo: 'Cuando el banco dice otra cosa',
             onTap: () => Navigator.of(context).pop('saldo'),
           ),
-          // La última que cuenta no se puede ocultar: sin ninguna, el patrimonio
-          // va a cero y **los movimientos desaparecen de todas las listas** —el
-          // historial filtra por cuentas que cuentan— así que la app entera se
-          // apaga sin decir por qué. El motor lo rechaza igual; acá se dice
-          // antes, en vez de dejar tocar algo que va a fallar.
-          FieldOption(
-            titulo: cuenta.isHidden ? 'Mostrar cuenta' : 'Ocultar cuenta del patrimonio',
-            subtitulo: esLaUltima ? 'Es la única que cuenta: sin ella no se vería nada' : null,
-            onTap: esLaUltima ? () {} : () => Navigator.of(context).pop('ocultar'),
-          ),
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => Navigator.of(context).pop('borrar'),
@@ -385,6 +422,62 @@ class _FilaCuenta extends ConsumerWidget {
       case 'borrar':
         await _confirmarBorrado(context, ref);
     }
+  }
+
+  /// El interruptor de "cuenta o no cuenta", en la fila y no dentro del menú de
+  /// los tres puntos.
+  ///
+  /// Es lo que más cambia lo que muestra la app —una cuenta apagada se cae del
+  /// total, de la curva y del historial— y escondido detrás de dos toques
+  /// pasaban las dos cosas malas: se apagaban cuentas sin querer, y después
+  /// nadie encontraba dónde volver a prenderlas. A la vista, el estado se lee
+  /// sin abrir nada y se cambia con un toque.
+  Widget _pastillaContar(BuildContext context, WidgetRef ref, AppColors colors, bool esCredito) {
+    final off = cuenta.isHidden;
+    // Una tarjeta nunca suma al patrimonio, así que acá la pregunta es otra: si
+    // se ve o no en las listas. Decirle "cuenta" sería mentirle.
+    final texto = esCredito ? (off ? 'oculta' : 'visible') : (off ? 'no cuenta' : 'cuenta');
+    // La última que cuenta no se puede apagar: sin ninguna el patrimonio va a
+    // cero y los movimientos desaparecen de todas las listas —el historial
+    // filtra por cuentas que cuentan—, así que la app entera se apaga sin decir
+    // por qué. El motor lo rechaza igual; acá se dice antes.
+    final esLaUltima = !off && !esCredito && cuentan <= 1;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () async {
+        if (esLaUltima) {
+          await showFeedback(
+            context,
+            title: 'No se puede ocultar',
+            message:
+                '"${cuenta.name}" es la única que cuenta en tu patrimonio. Si la quitas no queda '
+                'ninguna y tus movimientos dejarían de verse.',
+            tone: FeedbackTone.aviso,
+          );
+          return;
+        }
+        await _toggleOculta(context, ref);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(Radii.pill),
+          color: off ? null : colors.sage.withValues(alpha: 0.16),
+          border: Border.all(color: off ? colors.surfaceBorder : const Color(0x00000000)),
+        ),
+        child: Text(
+          texto,
+          style: AppText.tiny(
+            esLaUltima
+                ? colors.oliveInk.withValues(alpha: 0.35)
+                : off
+                ? colors.oliveInk.withValues(alpha: 0.55)
+                : colors.sageInk,
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _toggleOculta(BuildContext context, WidgetRef ref) async {
@@ -488,7 +581,7 @@ class _FilaCuenta extends ConsumerWidget {
       behavior: HitTestBehavior.opaque,
       onTap: () => _abrirAcciones(context, ref),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 7),
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: colors.foreground.withValues(alpha: 0.06))),
         ),
@@ -500,8 +593,8 @@ class _FilaCuenta extends ConsumerWidget {
             // app. Es un refuerzo, no la información: al lado va el ícono y
             // debajo el nombre.
             Container(
-              width: 3,
-              height: 26,
+              width: 2,
+              height: 20,
               decoration: BoxDecoration(
                 color: colorDeCuenta(
                   cuenta.type,
@@ -518,11 +611,13 @@ class _FilaCuenta extends ConsumerWidget {
                 cuenta.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppText.body(
+                style: AppText.small(
                   colors.foreground.withValues(alpha: cuenta.isHidden ? 0.45 : 1),
                 ).copyWith(decoration: cuenta.isHidden ? TextDecoration.lineThrough : null),
               ),
             ),
+            _pastillaContar(context, ref, colors, esCredito),
+            const SizedBox(width: Spacing.sm),
             if (esCredito)
               Padding(
                 padding: const EdgeInsets.only(right: 5),
@@ -541,7 +636,7 @@ class _FilaCuenta extends ConsumerWidget {
               ),
               style: AppText.money(
                 colors.foreground.withValues(alpha: cuenta.isHidden ? 0.4 : 1),
-                size: 13.5,
+                size: 12.5,
                 weight: FontWeight.w600,
               ).copyWith(decoration: cuenta.isHidden ? TextDecoration.lineThrough : null),
             ),
@@ -550,7 +645,7 @@ class _FilaCuenta extends ConsumerWidget {
             // algo que se toca, y detrás de él están las únicas acciones de la
             // cuenta. Un menú que no parece un botón es un menú que no existe.
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              padding: const EdgeInsets.symmetric(horizontal: 5),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(Radii.pill),
                 border: Border.all(color: colors.surfaceBorder),

@@ -930,3 +930,27 @@ String iconoDeCuenta(String type) => switch (type) {
   'LOAN' => '📄',
   _ => '💼',
 };
+
+/// En qué grupo cae cada cuenta, y cómo se llama ese grupo.
+///
+/// Por naturaleza y no por tipo exacto: "corriente" y "ahorros" son las dos
+/// cosas que tienes en el banco, y separarlas en dos bloques de una fila cada
+/// uno es partir la lista sin decir nada. Lo que sí hay que separar es lo que
+/// **tienes** de lo que **debes** — justo lo que se volvió confuso al entrar las
+/// tarjetas.
+enum GrupoDeCuenta { banco, efectivo, inversion, credito }
+
+/// El orden: primero donde está el grueso del dinero, al final lo que se debe.
+const gruposDeCuenta = [
+  (GrupoDeCuenta.banco, 'En el banco'),
+  (GrupoDeCuenta.efectivo, 'Efectivo'),
+  (GrupoDeCuenta.inversion, 'Inversión'),
+  (GrupoDeCuenta.credito, 'Crédito'),
+];
+
+GrupoDeCuenta grupoDeCuenta(String type) => switch (type) {
+  'CHECKING' || 'SAVINGS' => GrupoDeCuenta.banco,
+  'CASH' => GrupoDeCuenta.efectivo,
+  'INVESTMENT' => GrupoDeCuenta.inversion,
+  _ => GrupoDeCuenta.credito,
+};
