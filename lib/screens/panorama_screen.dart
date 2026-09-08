@@ -19,6 +19,7 @@ import '../ui/format.dart';
 import '../ui/icons.dart';
 import '../ui/modal.dart';
 import '../ui/spending_days_chart.dart';
+import '../local_engine/ledger.dart' show tiposDeCredito;
 import '../ui/net_worth_chart.dart';
 import '../ui/refreshable_screen.dart';
 import '../ui/todo_oculto.dart';
@@ -452,7 +453,17 @@ class _PanoramaScreenState extends ConsumerState<PanoramaScreen> {
                 loading: () => const _Esqueleto(alto: 150),
                 error: (_, __) => const _NoCargo(),
                 data: (puntos) {
-                  final cuentas = posicion.valueOrNull?.accounts ?? const <CashPositionAccount>[];
+                  // El crédito no entra en esta lista.
+                  //
+                  // La curva es el patrimonio, y lo que debes en una tarjeta no
+                  // es parte de él: el desglose por cuenta solo trae las
+                  // líquidas, así que una tarjeta encendida acá no dibujaba nada
+                  // —sumaba cero— y "todas mis cuentas" prometía incluirla. Un
+                  // filtro que ofrece algo que no puede hacer es peor que no
+                  // ofrecerlo.
+                  final cuentas = (posicion.valueOrNull?.accounts ?? const <CashPositionAccount>[])
+                      .where((c) => !tiposDeCredito.contains(c.type))
+                      .toList();
                   // La serie diaria, para poder recomponer la mensual al
                   // filtrar. Se pide siempre: el provider la cachea, y en la
                   // escala diaria es la misma que ya se está mirando.
