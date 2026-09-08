@@ -72,12 +72,21 @@ void registerFinancialEngineRoutes() {
     final monthStart = clock.startOfMonth();
     final monthEnd = clock.endOfMonth();
 
+    // Las líquidas más las tarjetas de uso diario —las de crédito **sin** deuda
+    // asociada—: lo que debes ahí es plata que vas a pagar, y no verla en ningún
+    // sitio es peor que verla. No suman al total, igual que las ocultas.
+    //
+    // El espejo de un préstamo no entra: eso vive en Deudas con su cronograma, y
+    // repetirlo acá sería contarlo dos veces en dos idiomas.
     final placeholdersTipo = List.filled(_liquidAccountTypes.length, '?').join(',');
-    final cuentas = await db.query(
-      'Account',
-      where: 'userId = ? AND isArchived = 0 AND type IN ($placeholdersTipo)',
-      whereArgs: [userId, ..._liquidAccountTypes],
-      orderBy: 'createdAt ASC',
+    final cuentas = await db.rawQuery(
+      'SELECT a.* FROM Account a '
+      'WHERE a.userId = ? AND a.isArchived = 0 AND ('
+      '  a.type IN ($placeholdersTipo)'
+      "  OR (a.type = 'CREDIT_CARD' AND NOT EXISTS ("
+      '    SELECT 1 FROM Debt d WHERE d.accountId = a.id))'
+      ') ORDER BY a.createdAt ASC',
+      [userId, ..._liquidAccountTypes],
     );
 
     final transacciones = await db.rawQuery(
@@ -96,9 +105,13 @@ void registerFinancialEngineRoutes() {
         .where((t) => t['type'] == 'EXPENSE')
         .fold<double>(0, (acc, t) => acc + (t['amount'] as num).toDouble());
 
+    // Una tarjeta nunca entra al total: su saldo es lo que debes, no lo que
+    // tienes. Sumarla haría que comprar con crédito subiera tu patrimonio.
     final total = round2(
       cuentas
-          .where((a) => (a['isHidden'] as int) == 0)
+          .where(
+            (a) => (a['isHidden'] as int) == 0 && _liquidAccountTypes.contains(a['type'] as String),
+          )
           .fold<double>(0, (acc, a) => acc + (a['currentBalance'] as num).toDouble()),
     );
 

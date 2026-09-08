@@ -22,6 +22,7 @@ import 'historial_screen.dart';
 import 'nuevo_movimiento.dart';
 import 'recurring_flow_form.dart';
 import 'shell.dart';
+import '../local_engine/ledger.dart' show tiposDeCredito;
 
 /// Movimientos: lo que entra, lo que sale fijo y lo que registraste suelto.
 ///
@@ -253,7 +254,14 @@ class _TarjetaPatrimonio extends ConsumerWidget {
           spacing: Spacing.sm,
           runSpacing: Spacing.sm,
           children: [
-            for (final c in posicion.accounts) _ChipCuenta(cuenta: c),
+            // Las líquidas primero y las tarjetas al final: unas son lo que
+            // tienes y las otras lo que debes, y mezcladas en la misma fila el
+            // ojo las suma sin querer.
+            for (final c in [
+              ...posicion.accounts.where((c) => !tiposDeCredito.contains(c.type)),
+              ...posicion.accounts.where((c) => tiposDeCredito.contains(c.type)),
+            ])
+              _ChipCuenta(cuenta: c),
             const _ChipAgregarCuenta(),
           ],
         ),
@@ -488,6 +496,10 @@ class _ChipCuenta extends ConsumerWidget {
               style: AppText.small(colors.foreground.withValues(alpha: cuenta.isHidden ? 0.55 : 1)),
             ),
             const SizedBox(width: 6),
+            // En una tarjeta el saldo es lo que **debes**, así que se dice: la
+            // misma cifra sin la palabra se lee como plata que tienes.
+            if (tiposDeCredito.contains(cuenta.type))
+              Text('debes ', style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.55))),
             Text(
               tapar(Money.format(cuenta.currentBalance, cuenta.currency), ocultos),
               style: AppText.money(

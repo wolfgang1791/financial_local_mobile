@@ -65,6 +65,10 @@ const _tiposCuenta = [
   ('CHECKING', 'Cuenta corriente'),
   ('SAVINGS', 'Cuenta de ahorros'),
   ('INVESTMENT', 'Inversión'),
+  // La tarjeta de uso diario, la que pagas entera cada mes. No es una deuda con
+  // tasa y plazo —para eso está la pantalla de Deudas— sino una cuenta de lo que
+  // debes: comprar sube su saldo, pagarla lo baja, y nunca suma al patrimonio.
+  ('CREDIT_CARD', 'Tarjeta de crédito'),
 ];
 
 class _EditorSaldo extends ConsumerStatefulWidget {
@@ -193,7 +197,7 @@ class _EditorSaldoState extends ConsumerState<_EditorSaldo> {
             ),
           ),
           const SizedBox(height: Spacing.lg),
-          const FieldLabel('Saldo real'),
+          FieldLabel(widget.cuenta.esDeCredito ? 'Lo que debes' : 'Saldo real'),
           FieldBox(
             child: Row(
               children: [

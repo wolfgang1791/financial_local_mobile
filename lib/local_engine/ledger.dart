@@ -25,6 +25,24 @@ double round2(double n) => (n * 100).round() / 100;
 /// un EXPENSE — así la aritmética no distingue tipos de asiento.
 double signedAmount(String type, double amount) => type == 'INCOME' ? amount : -amount;
 
+/// Los tipos de cuenta cuyo saldo es **lo que debes** y no lo que tienes.
+const tiposDeCredito = {'CREDIT_CARD', 'LOAN'};
+
+/// Cuánto mueve un asiento el saldo de **su** cuenta.
+///
+/// En una cuenta líquida el saldo es lo que tienes: un gasto lo baja. En una de
+/// crédito el saldo es lo que debes, un número positivo, así que un cargo lo
+/// **sube** — comprar con la tarjeta no te deja con menos deuda.
+///
+/// Existe aparte de `signedAmount` porque ese contesta otra pregunta —"¿esto
+/// suma o resta plata?"— y lo usan los totales de gasto e ingreso, donde un
+/// cargo a la tarjeta sí es un gasto de verdad. Lo que cambia según el tipo de
+/// cuenta es a dónde va en el saldo, no si fue gasto.
+double balanceDelta(String accountType, String type, double amount) {
+  final signo = signedAmount(type, amount);
+  return tiposDeCredito.contains(accountType) ? -signo : signo;
+}
+
 /// El saldo que había antes de cada movimiento, por id — reconstruido
 /// caminando el ledger de más nuevo a más viejo desde el saldo de hoy.
 ///

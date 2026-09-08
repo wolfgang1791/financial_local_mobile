@@ -18,7 +18,6 @@ const _adjustmentDetail = 'AJUSTE FUERA DE FINANCIAL';
 
 /// Los mismos dos tipos que el backend excluye de este listado: una tarjeta
 /// o un préstamo no son dinero disponible, son deuda — viven en `/debts`.
-const _tiposDeuda = ['CREDIT_CARD', 'LOAN'];
 
 Map<String, dynamic> _accountJson(Map<String, Object?> fila) =>
     mapRow(fila, columnasBooleanas: _columnasBooleanas, columnasFecha: _columnasFecha);
@@ -45,16 +44,22 @@ Future<void> _crearAsientoInicial(
 }
 
 void registerAccountsRoutes() {
-  // GET /accounts — mismo criterio que `AccountsService.findAllForUser`:
-  // no archivadas, sin las de tipo deuda, más viejas primero.
+  // GET /accounts — mismo criterio que `AccountsService.findAllForUser`: las que
+  // no son el espejo de una deuda, no archivadas, más viejas primero.
+  //
+  // Se excluye **por la relación y no por el tipo**. Antes se tomaba "es tarjeta
+  // de crédito" como sinónimo de "pertenece a una deuda", y no lo es: una
+  // tarjeta de uso diario, que pagas entera cada mes, es una cuenta de lo que
+  // debes y no un préstamo con tasa, cuota mínima y plazo. Con el filtro por
+  // tipo no había forma de tenerla — no aparecía en ningún selector.
   LocalApiRouter.registerGet('/accounts', (db, uri, body) async {
     final userId = await currentUserId(db);
-    final placeholders = List.filled(_tiposDeuda.length, '?').join(',');
-    final filas = await db.query(
-      'Account',
-      where: 'userId = ? AND isArchived = 0 AND type NOT IN ($placeholders)',
-      whereArgs: [userId, ..._tiposDeuda],
-      orderBy: 'createdAt ASC',
+    final filas = await db.rawQuery(
+      'SELECT a.* FROM Account a '
+      'WHERE a.userId = ? AND a.isArchived = 0 '
+      '  AND NOT EXISTS (SELECT 1 FROM Debt d WHERE d.accountId = a.id) '
+      'ORDER BY a.createdAt ASC',
+      [userId],
     );
     return filas.map(_accountJson).toList();
   });
@@ -244,14 +249,20 @@ void registerAccountsRoutes() {
             ])).first['n']
             as int;
 
+    final esEspejoDeDeuda =
+        ((await db.rawQuery('SELECT COUNT(*) AS n FROM Debt WHERE accountId = ?', [id])).first['n']
+                as num)
+            .toInt() >
+        0;
+
     return {
       'name': cuenta['name'],
       'balance': (cuenta['currentBalance'] as num).toDouble(),
       'movements': movimientos,
       'recurringFlows': flujos,
-      'blockedBy': _tiposDeuda.contains(cuenta['type'])
-          ? 'DEBT_ACCOUNT'
-          : (pagosDeuda > 0 ? 'DEBT_PAYMENTS' : null),
+      // Por la relación y no por el tipo: lo que no se puede borrar por acá es
+      // el espejo de una deuda —se iría con ella—, no cualquier tarjeta.
+      'blockedBy': esEspejoDeDeuda ? 'DEBT_ACCOUNT' : (pagosDeuda > 0 ? 'DEBT_PAYMENTS' : null),
       'debtPayments': pagosDeuda,
     };
   });
@@ -291,9 +302,14 @@ void registerAccountsRoutes() {
       whereArgs: [id, userId],
     );
     if (filas.isEmpty) throw ApiException('Account $id not found', status: 404);
-    final cuenta = filas.first;
 
-    if (_tiposDeuda.contains(cuenta['type'])) {
+    // Por la relación y no por el tipo, igual que arriba.
+    final tieneDeuda =
+        ((await db.rawQuery('SELECT COUNT(*) AS n FROM Debt WHERE accountId = ?', [id])).first['n']
+                as num)
+            .toInt() >
+        0;
+    if (tieneDeuda) {
       throw ApiException('Account $id belongs to a debt. Delete the debt instead.');
     }
 

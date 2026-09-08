@@ -1,3 +1,5 @@
+import '../local_engine/ledger.dart' show tiposDeCredito;
+
 /// Los modelos que la app consume.
 ///
 /// Se parsean a mano y no con generación de código: son diez tipos, el JSON lo
@@ -736,6 +738,7 @@ class Account {
   const Account({
     required this.id,
     required this.name,
+    this.type = 'CASH',
     required this.currency,
     required this.balance,
     required this.isHidden,
@@ -744,6 +747,7 @@ class Account {
   factory Account.fromJson(Map<String, dynamic> j) => Account(
     id: j['id'] as String,
     name: (j['name'] as String?) ?? '',
+    type: (j['type'] as String?) ?? 'CASH',
     currency: (j['currency'] as String?) ?? 'PEN',
     balance: _num(j['currentBalance']),
     isHidden: (j['isHidden'] as bool?) ?? false,
@@ -751,9 +755,17 @@ class Account {
 
   final String id;
   final String name;
+
+  /// CASH, CHECKING, SAVINGS, INVESTMENT o CREDIT_CARD. Decide si su saldo es lo
+  /// que tienes o **lo que debes**, y si suma al patrimonio.
+  final String type;
   final String currency;
   final double balance;
   final bool isHidden;
+
+  /// Su saldo es deuda, no dinero: nunca entra en el patrimonio, y en un
+  /// selector hay que decirlo.
+  bool get esDeCredito => tiposDeCredito.contains(type);
 }
 
 /// Una moneda que el backend conoce, para los selectores.
@@ -856,9 +868,21 @@ class AccountDeletionImpact {
 /// selector que no ofrece una de tus cuentas es un callejón sin salida. Lo que
 /// se arregla es la sorpresa, no la opción.
 extension EtiquetaDeCuenta on Account {
-  /// El aviso para el subtítulo de una opción, o `null` si la cuenta cuenta.
-  String? get avisoDePatrimonio => isHidden ? 'Oculta · no cuenta en tu patrimonio' : null;
+  /// El aviso para el subtítulo de una opción, o `null` si no hace falta.
+  ///
+  /// Dos razones distintas para no contar, y conviene distinguirlas: una cuenta
+  /// oculta la sacaste tú y se devuelve con un toque; una tarjeta de crédito
+  /// nunca cuenta, porque su saldo es deuda y no dinero.
+  String? get avisoDePatrimonio => esDeCredito
+      ? 'Crédito · lo que gastes acá lo debes, no sale de tu patrimonio'
+      : isHidden
+      ? 'Oculta · no cuenta en tu patrimonio'
+      : null;
 
   /// El nombre para un campo ya elegido, con el aviso pegado si hace falta.
-  String get nombreConAviso => isHidden ? '$name · no cuenta en tu patrimonio' : name;
+  String get nombreConAviso => esDeCredito
+      ? '$name · crédito'
+      : isHidden
+      ? '$name · no cuenta en tu patrimonio'
+      : name;
 }

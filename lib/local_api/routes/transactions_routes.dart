@@ -313,8 +313,9 @@ void registerTransactionsRoutes() {
       'occurredAt': occurredAt.millisecondsSinceEpoch,
       'createdAt': DateTime.now().toUtc().millisecondsSinceEpoch,
     });
+    // Con la regla de la cuenta: en una tarjeta un cargo **sube** lo que debes.
     await db.rawUpdate('UPDATE Account SET currentBalance = currentBalance + ? WHERE id = ?', [
-      signedAmount(type, amount),
+      balanceDelta(cuenta.first['type'] as String, type, amount),
       accountId,
     ]);
 
@@ -385,12 +386,17 @@ void registerTransactionsRoutes() {
       'description': 'Transferencia desde ${origen['name']}',
       'createdAt': ahora,
     });
-    await db.rawUpdate('UPDATE Account SET currentBalance = currentBalance - ? WHERE id = ?', [
-      amount,
+    // Cada cuenta con su regla, y por eso no es un simple resta/suma.
+    //
+    // Pagar la tarjeta es una transferencia de la corriente a la tarjeta: baja el
+    // efectivo **y baja lo que debes**. Con la suma de siempre, pagar la tarjeta
+    // la subía — el saldo de una cuenta de crédito es deuda, no dinero.
+    await db.rawUpdate('UPDATE Account SET currentBalance = currentBalance + ? WHERE id = ?', [
+      balanceDelta(origen['type'] as String, 'EXPENSE', amount),
       fromId,
     ]);
     await db.rawUpdate('UPDATE Account SET currentBalance = currentBalance + ? WHERE id = ?', [
-      amount,
+      balanceDelta(destino['type'] as String, 'INCOME', amount),
       toId,
     ]);
 
@@ -435,15 +441,29 @@ void registerTransactionsRoutes() {
     }
 
     final clock = await UserClock.forUser(db, userId);
-    final oldSigned = signedAmount(
-      existente['type'] as String,
-      (existente['amount'] as num).toDouble(),
-    );
     final newType = (datos['type'] as String?) ?? existente['type'] as String;
     final newAmount =
         (datos['amount'] as num?)?.toDouble() ?? (existente['amount'] as num).toDouble();
     final newAccountId = (datos['accountId'] as String?) ?? existente['accountId'] as String;
-    final newSigned = signedAmount(newType, newAmount);
+
+    // Cada cuenta con su regla: mover un cargo de la tarjeta a la corriente baja
+    // lo que debes en una y el saldo en la otra. Con una sola regla, moverlo
+    // entre cuentas de distinta naturaleza dejaba las dos mal.
+    final tipos = <String, String>{
+      for (final c in await db.query(
+        'Account',
+        columns: ['id', 'type'],
+        where: 'id IN (?, ?)',
+        whereArgs: [existente['accountId'], newAccountId],
+      ))
+        c['id'] as String: c['type'] as String,
+    };
+    final oldSigned = balanceDelta(
+      tipos[existente['accountId']]!,
+      existente['type'] as String,
+      (existente['amount'] as num).toDouble(),
+    );
+    final newSigned = balanceDelta(tipos[newAccountId]!, newType, newAmount);
 
     final cambios = <String, Object?>{};
     for (final campo in [
@@ -519,7 +539,22 @@ void registerTransactionsRoutes() {
         : [entrada];
 
     for (final pata in patas) {
-      final firmado = signedAmount(pata['type'] as String, (pata['amount'] as num).toDouble());
+      // Se deshace con la misma regla con la que se aplicó: en una tarjeta el
+      // cargo subió lo que debes, así que borrarlo lo baja.
+      final tipoDeSuCuenta =
+          (await db.query(
+                'Account',
+                columns: ['type'],
+                where: 'id = ?',
+                whereArgs: [pata['accountId']],
+                limit: 1,
+              )).first['type']
+              as String;
+      final firmado = balanceDelta(
+        tipoDeSuCuenta,
+        pata['type'] as String,
+        (pata['amount'] as num).toDouble(),
+      );
       await db.rawUpdate('UPDATE Account SET currentBalance = currentBalance - ? WHERE id = ?', [
         firmado,
         pata['accountId'],
