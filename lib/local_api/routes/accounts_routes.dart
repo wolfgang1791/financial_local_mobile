@@ -13,6 +13,9 @@ const _columnasBooleanas = {'isArchived', 'isHidden', 'isPrimary'};
 
 /// Las que forman el patrimonio. Misma lista que el motor financiero.
 const _tiposLiquidos = {'CHECKING', 'SAVINGS', 'CASH'};
+
+/// Aquellas cuyo saldo es lo que **debes**, no lo que tienes.
+const _tiposDeCredito = {'CREDIT_CARD', 'LOAN'};
 const _columnasFecha = {'createdAt', 'updatedAt'};
 const _adjustmentDetail = 'AJUSTE FUERA DE FINANCIAL';
 
@@ -29,12 +32,16 @@ Future<void> _crearAsientoInicial(
   Database db,
   String accountId,
   double amount,
-  DateTime occurredAt,
-) async {
+  DateTime occurredAt, {
+  bool esDeCredito = false,
+}) async {
   await db.insert('Transaction', {
     'id': _uuid.v4(),
     'accountId': accountId,
-    'type': amount >= 0 ? 'INCOME' : 'EXPENSE',
+    // En una tarjeta el saldo es lo que debes, así que "empiezo debiendo 400" es
+    // un gasto y no un ingreso. Con el signo plano el historial contaba una
+    // deuda estrenada como plata que entró.
+    'type': (amount >= 0) != esDeCredito ? 'INCOME' : 'EXPENSE',
     'kind': 'OPENING_BALANCE',
     'amount': amount.abs(),
     'detail': 'Saldo inicial',
@@ -225,13 +232,15 @@ void registerAccountsRoutes() {
     );
     final entryCount = (entryCountFila.first['n'] as num).toInt();
 
+    final esDeCredito = _tiposDeCredito.contains(cuenta['type'] as String);
     if (entryCount == 0) {
-      await _crearAsientoInicial(db, id, delta, occurredAt);
+      await _crearAsientoInicial(db, id, delta, occurredAt, esDeCredito: esDeCredito);
     } else {
       await db.insert('Transaction', {
         'id': _uuid.v4(),
         'accountId': id,
-        'type': delta > 0 ? 'INCOME' : 'EXPENSE',
+        // Igual que arriba: en una tarjeta, deber más es un gasto.
+        'type': (delta > 0) != esDeCredito ? 'INCOME' : 'EXPENSE',
         'kind': 'ADJUSTMENT',
         'amount': delta.abs(),
         'detail': _adjustmentDetail,
@@ -359,12 +368,11 @@ void registerAccountsRoutes() {
     }
 
     await db.update('RecurringFlow', {'accountId': null}, where: 'accountId = ?', whereArgs: [id]);
-    await db.update(
-      'Goal',
-      {'linkedAccountId': null},
-      where: 'linkedAccountId = ?',
-      whereArgs: [id],
-    );
+    // Los objetivos se fueron con la capa de consejo: la tabla `Goal` ya no
+    // existe, y esta línea se quedó apuntándola. No era un caso raro —era
+    // **cualquier** borrado de cuenta—: sqlite contestaba "no such table" y la
+    // excepción ni siquiera era una `ApiException`, así que la pantalla no la
+    // atrapaba y el borrado se quedaba a medias sin decir nada.
     await db.delete('Transaction', where: 'accountId = ?', whereArgs: [id]);
     await db.delete('Account', where: 'id = ?', whereArgs: [id]);
 
