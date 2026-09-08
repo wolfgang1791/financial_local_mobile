@@ -377,21 +377,33 @@ class _ChipCuenta extends ConsumerWidget {
       case 'saldo':
         await abrirEditorSaldo(context, cuenta: _comoAccount);
       case 'ocultar':
-        await _toggleOculta(ref);
+        await _toggleOculta(context, ref);
       case 'borrar':
         await _confirmarBorrado(context, ref);
     }
   }
 
-  Future<void> _toggleOculta(WidgetRef ref) async {
+  Future<void> _toggleOculta(BuildContext context, WidgetRef ref) async {
     try {
       await ref.read(apiProvider).patch('/accounts/${cuenta.id}', {'isHidden': !cuenta.isHidden});
       ref
         ..invalidate(cashPositionProvider)
         ..invalidate(accountsProvider);
+    } on ApiException catch (e) {
+      // El motor rechaza ocultar la última que cuenta, y ese mensaje está
+      // escrito para leerse. Tragárselo dejaba al usuario tocando un chip que no
+      // hacía nada, sin ninguna pista de por qué.
+      if (context.mounted) {
+        await showFeedback(
+          context,
+          title: 'No se puede ocultar',
+          message: e.message,
+          tone: FeedbackTone.aviso,
+        );
+      }
     } catch (_) {
-      // Sin feedback bloqueante: si falló, la cuenta simplemente no cambió de
-      // estado y el usuario lo nota al ver que sigue igual.
+      // Cualquier otro fallo: la cuenta no cambió de estado y se ve al instante
+      // que sigue igual.
     }
   }
 
