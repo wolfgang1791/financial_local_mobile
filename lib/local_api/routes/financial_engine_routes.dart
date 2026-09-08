@@ -126,6 +126,9 @@ void registerFinancialEngineRoutes() {
               'currentBalance': (a['currentBalance'] as num).toDouble(),
               'currency': a['currency'],
               'isHidden': (a['isHidden'] as int) == 1,
+              // Cuál es la principal: la tarjeta de cuentas la marca y desde ahí
+              // se cambia, sin pedir /accounts solo para eso.
+              'isPrimary': (a['isPrimary'] as int? ?? 0) == 1,
               // El cupo, para decir cuánto queda y no solo cuánto se debe.
               'creditLimit': (a['creditLimit'] as num?)?.toDouble(),
             },

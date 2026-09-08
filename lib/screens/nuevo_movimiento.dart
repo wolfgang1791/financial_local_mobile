@@ -83,7 +83,7 @@ class _FormularioState extends ConsumerState<_Formulario> {
 
   Future<void> _guardar(List<Account> cuentas) async {
     final monto = _montoValido;
-    final cuentaId = _cuentaId ?? (cuentas.isEmpty ? null : cuentas.first.id);
+    final cuentaId = _cuentaId ?? cuentaPorDefecto(cuentas)?.id;
 
     // Se valida antes de llamar y se dice qué falta, en vez de dejar que el
     // backend responda un 400 que hay que traducir.
@@ -180,9 +180,8 @@ class _FormularioState extends ConsumerState<_Formulario> {
     // ojito de la tarjeta, y dejarla a la vista acá deja el interruptor a
     // medias.
     final ocultos = ref.watch(saldosOcultosProvider);
-    final cuenta =
-        cuentas.where((c) => c.id == _cuentaId).firstOrNull ??
-        (cuentas.isEmpty ? null : cuentas.first);
+    // Sin elegir nada, la que el usuario dijo que es su principal.
+    final cuenta = cuentas.where((c) => c.id == _cuentaId).firstOrNull ?? cuentaPorDefecto(cuentas);
     final esTransferencia = _modo == _Modo.transferencia;
     final esPagoDeTarjeta = _modo == _Modo.tarjeta;
     // Las de uso diario: crédito sin deuda asociada. `/accounts` ya las trae y

@@ -90,6 +90,13 @@ abstract final class LocalDatabase {
       await db.execute('ALTER TABLE Account ADD COLUMN creditLimit DECIMAL');
     }
 
+    // La cuenta principal: la que los formularios proponen solos al preguntar de
+    // dónde salió la plata. Una por usuario, y ninguna también vale —ahí manda
+    // el criterio de siempre, la primera cuenta corriente—.
+    if (!deCuenta.any((c) => c['name'] == 'isPrimary')) {
+      await db.execute('ALTER TABLE Account ADD COLUMN isPrimary INTEGER NOT NULL DEFAULT 0');
+    }
+
     final columnas = await db.rawQuery('PRAGMA table_info(RecurringFlow)');
     if (!columnas.any((c) => c['name'] == 'monthlyAmounts')) {
       await db.execute('ALTER TABLE RecurringFlow ADD COLUMN monthlyAmounts TEXT');

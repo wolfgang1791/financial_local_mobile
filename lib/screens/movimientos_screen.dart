@@ -395,6 +395,16 @@ class _FilaCuenta extends ConsumerWidget {
             subtitulo: 'Cuando el banco dice otra cosa',
             onTap: () => Navigator.of(context).pop('saldo'),
           ),
+          // Hacerla principal vive en el menú y no en la fila: se elige una vez
+          // y no se vuelve a tocar en meses, al revés que contar o no contar.
+          // Nunca sobre una tarjeta —la principal es de donde sale la plata— ni
+          // sobre la que ya lo es.
+          if (!tiposDeCredito.contains(cuenta.type) && !cuenta.isPrimary)
+            FieldOption(
+              titulo: 'Hacerla mi cuenta principal',
+              subtitulo: 'La que se propone sola al registrar un movimiento',
+              onTap: () => Navigator.of(context).pop('principal'),
+            ),
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => Navigator.of(context).pop('borrar'),
@@ -417,6 +427,8 @@ class _FilaCuenta extends ConsumerWidget {
         await abrirRenombrarCuenta(context, cuenta: _comoAccount);
       case 'saldo':
         await abrirEditorSaldo(context, cuenta: _comoAccount);
+      case 'principal':
+        await _hacerPrincipal(context, ref);
       case 'ocultar':
         await _toggleOculta(context, ref);
       case 'borrar':
@@ -478,6 +490,24 @@ class _FilaCuenta extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _hacerPrincipal(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(apiProvider).patch('/accounts/${cuenta.id}', {'isPrimary': true});
+      ref
+        ..invalidate(cashPositionProvider)
+        ..invalidate(accountsProvider);
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        await showFeedback(
+          context,
+          title: 'No se pudo cambiar',
+          message: e.message,
+          tone: FeedbackTone.aviso,
+        );
+      }
+    }
   }
 
   Future<void> _toggleOculta(BuildContext context, WidgetRef ref) async {
@@ -607,13 +637,30 @@ class _FilaCuenta extends ConsumerWidget {
             Text(iconoDeCuenta(cuenta.type), style: AppText.small(colors.foreground)),
             const SizedBox(width: Spacing.sm),
             Expanded(
-              child: Text(
-                cuenta.name,
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: cuenta.name,
+                      style: AppText.small(
+                        colors.foreground.withValues(alpha: cuenta.isHidden ? 0.45 : 1),
+                      ).copyWith(decoration: cuenta.isHidden ? TextDecoration.lineThrough : null),
+                    ),
+                    // Cuál es la principal se ve en la lista, no dentro de un
+                    // menú: es la que todos los formularios van a proponer, y
+                    // saber cuál es sin abrir nada es la mitad de para qué
+                    // sirve elegirla.
+                    if (cuenta.isPrimary)
+                      TextSpan(
+                        text: '  principal',
+                        style: AppText.tiny(
+                          colors.sageInk.withValues(alpha: 0.8),
+                        ).copyWith(fontWeight: FontWeight.w600),
+                      ),
+                  ],
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppText.small(
-                  colors.foreground.withValues(alpha: cuenta.isHidden ? 0.45 : 1),
-                ).copyWith(decoration: cuenta.isHidden ? TextDecoration.lineThrough : null),
               ),
             ),
             _pastillaContar(context, ref, colors, esCredito),
@@ -899,8 +946,7 @@ class _FormularioMonto extends StatefulWidget {
 }
 
 class _FormularioMontoState extends State<_FormularioMonto> {
-  late String? _cuentaId =
-      widget.cuentaInicial ?? (widget.cuentas.isEmpty ? null : widget.cuentas.first.id);
+  late String? _cuentaId = widget.cuentaInicial ?? cuentaPorDefecto(widget.cuentas)?.id;
 
   @override
   Widget build(BuildContext context) {

@@ -260,9 +260,8 @@ class _FormularioFlujoState extends ConsumerState<_FormularioFlujo> {
     final colors = AppTheme.of(context);
     final cuentas = ref.watch(accountsProvider).valueOrNull ?? const <Account>[];
     final categorias = ref.watch(categoriesProvider).valueOrNull ?? const <Category>[];
-    final cuenta =
-        cuentas.where((c) => c.id == _cuentaId).firstOrNull ??
-        (cuentas.isEmpty ? null : cuentas.first);
+    // Sin elegir nada, la que el usuario dijo que es su principal.
+    final cuenta = cuentas.where((c) => c.id == _cuentaId).firstOrNull ?? cuentaPorDefecto(cuentas);
 
     // La categoría del flujo existente llega como nombre desde el backend; se
     // resuelve contra el catálogo recién cuando ya cargó, y solo una vez —si

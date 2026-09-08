@@ -172,6 +172,7 @@ class CashPositionAccount {
     this.creditLimit,
     required this.currency,
     required this.isHidden,
+    this.isPrimary = false,
   });
 
   factory CashPositionAccount.fromJson(Map<String, dynamic> j) => CashPositionAccount(
@@ -182,6 +183,7 @@ class CashPositionAccount {
     creditLimit: _numOrNull(j['creditLimit']),
     currency: (j['currency'] as String?) ?? 'PEN',
     isHidden: (j['isHidden'] as bool?) ?? false,
+    isPrimary: (j['isPrimary'] as bool?) ?? false,
   );
 
   final String id;
@@ -197,6 +199,9 @@ class CashPositionAccount {
   /// Excluida del patrimonio a pedido del usuario. Viaja igual para que la
   /// tarjeta la muestre apagada y se pueda volver a sumar.
   final bool isHidden;
+
+  /// La principal, para poder marcarla y cambiarla desde la misma lista.
+  final bool isPrimary;
 }
 
 class CashPosition {
@@ -751,6 +756,7 @@ class Account {
     required this.balance,
     this.creditLimit,
     required this.isHidden,
+    this.isPrimary = false,
   });
 
   factory Account.fromJson(Map<String, dynamic> j) => Account(
@@ -761,6 +767,7 @@ class Account {
     balance: _num(j['currentBalance']),
     creditLimit: _numOrNull(j['creditLimit']),
     isHidden: (j['isHidden'] as bool?) ?? false,
+    isPrimary: (j['isPrimary'] as bool?) ?? false,
   );
 
   final String id;
@@ -775,6 +782,10 @@ class Account {
   /// El cupo de una tarjeta. `null` en el resto y en una tarjeta sin cupo.
   final double? creditLimit;
   final bool isHidden;
+
+  /// La principal: la que los formularios proponen solos al preguntar de dónde
+  /// salió la plata. Una por usuario, y puede no haber ninguna.
+  final bool isPrimary;
 
   /// Su saldo es deuda, no dinero: nunca entra en el patrimonio, y en un
   /// selector hay que decirlo.
@@ -954,3 +965,20 @@ GrupoDeCuenta grupoDeCuenta(String type) => switch (type) {
   'INVESTMENT' => GrupoDeCuenta.inversion,
   _ => GrupoDeCuenta.credito,
 };
+
+/// Qué cuenta proponen los formularios cuando preguntan de dónde salió la plata.
+///
+/// Manda la que el usuario eligió como principal. Sin ninguna elegida se cae al
+/// criterio de siempre —la primera cuenta corriente, y si no hay, la primera de
+/// la lista—: es una suposición razonable, pero seguía siendo una suposición, y
+/// quien tiene tres cuentas corregía el selector en cada movimiento.
+///
+/// Nunca una tarjeta: la pregunta es de dónde sale la plata, y una tarjeta es lo
+/// que debes. Se elige a mano cuando toca, no por descarte.
+Account? cuentaPorDefecto(List<Account> cuentas) {
+  final liquidas = cuentas.where((c) => !c.esDeCredito);
+  return liquidas.where((c) => c.isPrimary).firstOrNull ??
+      liquidas.where((c) => c.type == 'CHECKING').firstOrNull ??
+      liquidas.firstOrNull ??
+      cuentas.firstOrNull;
+}

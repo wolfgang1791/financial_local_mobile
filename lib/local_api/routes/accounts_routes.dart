@@ -9,7 +9,7 @@ import '../current_user.dart';
 import '../local_api_router.dart';
 
 const _uuid = Uuid();
-const _columnasBooleanas = {'isArchived', 'isHidden'};
+const _columnasBooleanas = {'isArchived', 'isHidden', 'isPrimary'};
 
 /// Las que forman el patrimonio. Misma lista que el motor financiero.
 const _tiposLiquidos = {'CHECKING', 'SAVINGS', 'CASH'};
@@ -85,6 +85,7 @@ void registerAccountsRoutes() {
       'currency': (datos['currency'] as String?) ?? 'PEN',
       'isArchived': 0,
       'isHidden': 0,
+      'isPrimary': 0,
       'createdAt': ahora.millisecondsSinceEpoch,
       'updatedAt': ahora.millisecondsSinceEpoch,
     });
@@ -148,6 +149,36 @@ void registerAccountsRoutes() {
         }
       }
       cambios['isHidden'] = ocultar ? 1 : 0;
+    }
+
+    // Elegir principal es elegir **una**: encender esta apaga la anterior. Las
+    // dos escrituras van juntas, o "la principal" pasaría a depender del orden
+    // en que salgan las filas de la base.
+    if (datos['isPrimary'] == true) {
+      // Una tarjeta no: la principal es de donde sale la plata, y una tarjeta es
+      // lo que debes. Proponerla sola convertiría cada gasto distraído en una
+      // compra a crédito.
+      final tipo = (cambios['type'] ?? existente.first['type']) as String;
+      if (!_tiposLiquidos.contains(tipo)) {
+        throw const ApiException(
+          'Tu cuenta principal tiene que ser una donde tengas plata: una tarjeta '
+          'de crédito no puede serlo.',
+        );
+      }
+      await db.update(
+        'Account',
+        {'isPrimary': 0},
+        where: 'userId = ? AND isPrimary = 1 AND id != ?',
+        whereArgs: [userId, id],
+      );
+      cambios['isPrimary'] = 1;
+      // Ocultarla y hacerla principal a la vez no es un estado: proponer una
+      // cuenta que no cuenta es proponer que el movimiento no se vea.
+      cambios['isHidden'] = 0;
+    } else if (cambios['isHidden'] == 1) {
+      // Al ocultarla deja de ser la principal: seguiría saliendo propuesta en
+      // cada formulario mientras su plata no cuenta en ningún total.
+      cambios['isPrimary'] = 0;
     }
 
     await db.update('Account', cambios, where: 'id = ?', whereArgs: [id]);
