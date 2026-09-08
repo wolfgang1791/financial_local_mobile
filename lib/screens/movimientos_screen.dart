@@ -546,7 +546,17 @@ class _FilaCuenta extends ConsumerWidget {
               ).copyWith(decoration: cuenta.isHidden ? TextDecoration.lineThrough : null),
             ),
             const SizedBox(width: Spacing.sm),
-            Text('⋮', style: AppText.body(colors.oliveInk.withValues(alpha: 0.45))),
+            // Con borde y no un glifo suelto: un "⋮" flotando no se lee como
+            // algo que se toca, y detrás de él están las únicas acciones de la
+            // cuenta. Un menú que no parece un botón es un menú que no existe.
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(Radii.pill),
+                border: Border.all(color: colors.surfaceBorder),
+              ),
+              child: Text('⋮', style: AppText.small(colors.oliveInk.withValues(alpha: 0.6))),
+            ),
           ],
         ),
       ),
