@@ -24,6 +24,7 @@ import '../ui/net_worth_chart.dart';
 import '../ui/refreshable_screen.dart';
 import '../ui/todo_oculto.dart';
 import '../ui/surface.dart';
+import 'nuevo_movimiento.dart';
 import 'shell.dart';
 
 /// Panorama: la misma lectura que la web, en el orden de la web.
@@ -312,7 +313,7 @@ class _PanoramaScreenState extends ConsumerState<PanoramaScreen> {
           // verdad vacío.
           data: (p) => p.accounts.isNotEmpty && p.accounts.every((c) => c.isHidden)
               ? TodoOculto(cuantas: p.accounts.length)
-              : _TarjetaSaldo(posicion: p, currency: user.currency),
+              : TarjetaSaldoDePanorama(posicion: p, currency: user.currency),
         ),
         // El bloque de arriba es uno solo, no tres tarjetas sueltas: "cuánto
         // tengo", "cuánto me falta pagar" y "cómo viene la deuda" son una sola
@@ -732,8 +733,11 @@ class _Alternador extends StatelessWidget {
 /// el degradado la separaba del resto de la pantalla como si fuera de otra app.
 /// Sobre la misma superficie que todo lo demás, la cifra manda por tamaño y no
 /// por color, y se lee de corrido con las tarjetas de abajo.
-class _TarjetaSaldo extends ConsumerWidget {
-  const _TarjetaSaldo({required this.posicion, required this.currency});
+/// Pública para poder probarla sola: montar Panorama entera en un test no
+/// termina nunca —tiene gráficos y refresco vivos— y esta tarjeta es justo lo
+/// que hay que fijar.
+class TarjetaSaldoDePanorama extends ConsumerWidget {
+  const TarjetaSaldoDePanorama({super.key, required this.posicion, required this.currency});
 
   final CashPosition posicion;
   final String currency;
@@ -743,6 +747,10 @@ class _TarjetaSaldo extends ConsumerWidget {
     final colors = AppTheme.of(context);
     final ocultos = ref.watch(saldosOcultosProvider);
     final neto = posicion.income - posicion.expenses;
+    // Las tarjetas de uso diario. Viajan con las demás cuentas porque su saldo
+    // vive en el mismo sitio, pero no son patrimonio: lo suyo es lo que debes.
+    final tarjetas = posicion.accounts.where((c) => tiposDeCredito.contains(c.type)).toList();
+    final enTarjetas = tarjetas.fold<double>(0, (a, c) => a + c.currentBalance);
 
     return AppCard(
       child: Column(
@@ -813,6 +821,125 @@ class _TarjetaSaldo extends ConsumerWidget {
               ],
             ),
           ),
+
+          // Lo que llevas gastado con las tarjetas del día a día.
+          //
+          // Va pegado al patrimonio y no en Deudas porque se lee **contra** él:
+          // la pregunta de esta pantalla es "¿me alcanza?", y una cifra de plata
+          // disponible sin lo que ya está comprometido la contesta a medias. No
+          // se resta del total —comprar con la tarjeta no te empobrece en el
+          // momento, te compromete— y por eso se dice con todas las letras en
+          // vez de mezclarla en la resta.
+          //
+          // Fuera de Deudas a propósito: esto no es un préstamo con cuotas ni
+          // tasa, es el consumo que se paga entero. Las tarjetas que sí
+          // respaldan una deuda no llegan hasta acá.
+          if (tarjetas.isNotEmpty) ...[
+            const SizedBox(height: Spacing.md),
+            Container(
+              padding: const EdgeInsets.only(top: Spacing.md),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: colors.foreground.withValues(alpha: 0.08))),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'EN TUS TARJETAS',
+                          style: AppText.kicker(colors.sageInk.withValues(alpha: 0.8)),
+                        ),
+                      ),
+                      if (enTarjetas == 0)
+                        Text(
+                          'Sin nada pendiente',
+                          style: AppText.small(colors.oliveInk.withValues(alpha: 0.6)),
+                        )
+                      else ...[
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Text(
+                            enTarjetas > 0 ? 'debes' : 'a favor',
+                            style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.55)),
+                          ),
+                        ),
+                        Text(
+                          tapar(Money.format(enTarjetas.abs(), currency), ocultos),
+                          style: AppText.money(
+                            colors.foreground,
+                            size: 14,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+
+                  // Una por una cuando hay más de una: "debes 36,892" no dice
+                  // cuál hay que pagar, y esa es la única decisión que sigue.
+                  if (tarjetas.length > 1) ...[
+                    const SizedBox(height: 4),
+                    for (final t in tarjetas)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                t.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppText.small(colors.oliveInk.withValues(alpha: 0.7)),
+                              ),
+                            ),
+                            Text(
+                              tapar(Money.format(t.currentBalance.abs(), currency), ocultos),
+                              style: AppText.money(
+                                colors.oliveInk.withValues(alpha: 0.75),
+                                size: 12.5,
+                                weight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+
+                  const SizedBox(height: 6),
+                  if (enTarjetas > 0)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => abrirNuevoMovimiento(context, pagarTarjeta: true),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Ya lo gastaste: sale de tu cuenta cuando la pagues, no antes.',
+                              style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.5)),
+                            ),
+                          ),
+                          const SizedBox(width: Spacing.sm),
+                          Text(
+                            'Pagar →',
+                            style: AppText.small(
+                              colors.sageInk,
+                            ).copyWith(fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Text(
+                      'Lo que gastes con ellas aparece acá hasta que las pagues.',
+                      style: AppText.tiny(colors.oliveInk.withValues(alpha: 0.5)),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -23,18 +23,26 @@ import '../ui/cupo_de_tarjeta.dart';
 /// Va en un modal y no en una pantalla propia: es una tarea corta que se hace
 /// desde donde estabas y te devuelve ahí mismo. Empujar una ruta obligaría a
 /// volver, y volver a una lista que ya no es la que dejaste.
-Future<bool> abrirNuevoMovimiento(BuildContext context) async {
+/// [pagarTarjeta] abre el formulario ya en el modo de pagar una tarjeta. Se
+/// llega así desde donde se ve lo que debes: ahí la siguiente pregunta es
+/// "¿la pago?", y obligar a abrir el formulario y encontrar la pastilla convierte
+/// una respuesta en una búsqueda.
+Future<bool> abrirNuevoMovimiento(BuildContext context, {bool pagarTarjeta = false}) async {
   final creado = await showAppModal<bool>(
     context,
-    title: 'Nuevo movimiento',
-    subtitle: 'Se descuenta o se suma a tu cuenta al guardarlo',
-    builder: (context) => const _Formulario(),
+    title: pagarTarjeta ? 'Pagar tarjeta' : 'Nuevo movimiento',
+    subtitle: pagarTarjeta
+        ? 'Sale de tu cuenta y baja lo que debes'
+        : 'Se descuenta o se suma a tu cuenta al guardarlo',
+    builder: (context) => _Formulario(pagarTarjeta: pagarTarjeta),
   );
   return creado ?? false;
 }
 
 class _Formulario extends ConsumerStatefulWidget {
-  const _Formulario();
+  const _Formulario({this.pagarTarjeta = false});
+
+  final bool pagarTarjeta;
 
   @override
   ConsumerState<_Formulario> createState() => _FormularioState();
@@ -47,8 +55,9 @@ enum _Modo { gasto, ingreso, transferencia, tarjeta }
 
 class _FormularioState extends ConsumerState<_Formulario> {
   /// Gasto por defecto: es lo que se registra el 90% de las veces. Un ingreso
-  /// suele ser el sueldo, y ese ya está como flujo recurrente.
-  _Modo _modo = _Modo.gasto;
+  /// suele ser el sueldo, y ese ya está como flujo recurrente. Salvo que se haya
+  /// entrado a pagar una tarjeta, que es una intención dicha en voz alta.
+  late _Modo _modo = widget.pagarTarjeta ? _Modo.tarjeta : _Modo.gasto;
   final _monto = TextEditingController();
   final _detalle = TextEditingController();
   String? _cuentaId;
