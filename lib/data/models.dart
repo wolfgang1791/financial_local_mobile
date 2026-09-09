@@ -975,10 +975,15 @@ GrupoDeCuenta grupoDeCuenta(String type) => switch (type) {
 ///
 /// Nunca una tarjeta: la pregunta es de dónde sale la plata, y una tarjeta es lo
 /// que debes. Se elige a mano cuando toca, no por descarte.
+/// Tampoco una que no cuenta: se ofrece en la lista —el usuario puede querer
+/// registrar ahí— pero proponerla sola sería empezar cada movimiento fuera del
+/// patrimonio sin haberlo pedido.
 Account? cuentaPorDefecto(List<Account> cuentas) {
   final liquidas = cuentas.where((c) => !c.esDeCredito);
-  return liquidas.where((c) => c.isPrimary).firstOrNull ??
-      liquidas.where((c) => c.type == 'CHECKING').firstOrNull ??
+  final cuentan = liquidas.where((c) => !c.isHidden);
+  return cuentan.where((c) => c.isPrimary).firstOrNull ??
+      cuentan.where((c) => c.type == 'CHECKING').firstOrNull ??
+      cuentan.firstOrNull ??
       liquidas.firstOrNull ??
       cuentas.firstOrNull;
 }

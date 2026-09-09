@@ -307,12 +307,23 @@ final recentTransactionsProvider = FutureProvider<List<Transaction>>((ref) async
 /// Las ocultas quedan fuera: el usuario decidió que esa plata no cuenta, y
 /// ofrecerlas para registrar un gasto contradice esa decisión — el movimiento
 /// entraría en una cuenta que después no suma en ningún total.
+/// Todas las cuentas del usuario, **incluidas las que no cuentan**.
+///
+/// Se listaban solo las visibles, y eso convertía "no la sumes a mi patrimonio"
+/// en "no existe": no se podía registrar un movimiento en ella, ni recibir ahí
+/// un ingreso fijo, ni transferirle plata. La cuenta seguía teniendo saldo y
+/// moviéndose en el banco de verdad; lo único que el usuario pidió fue no
+/// contarla.
+///
+/// Y se llevaba por delante cosas que no tienen que ver: con una sola cuenta
+/// visible desaparecía la pastilla de "Transferir" —hacen falta dos— aunque
+/// hubiera tres cuentas.
+///
+/// Las pantallas ya saben decirlo: cada selector muestra "no cuenta en tu
+/// patrimonio" debajo del nombre, así que se ofrece sin sorpresa.
 final accountsProvider = FutureProvider<List<Account>>((ref) async {
   final r = await ref.watch(apiProvider).get('/accounts') as List;
-  return r
-      .map((e) => Account.fromJson(e as Map<String, dynamic>))
-      .where((a) => !a.isHidden)
-      .toList();
+  return r.map((e) => Account.fromJson(e as Map<String, dynamic>)).toList();
 });
 
 /// El catálogo completo de categorías.
