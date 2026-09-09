@@ -305,6 +305,12 @@ class FieldSwitch<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.of(context);
+    // Con cuatro opciones cada una se queda con un cuarto del ancho, y en un
+    // teléfono eso son unos ochenta píxeles: "Pagar tarjeta" no entra en ese
+    // tamaño y se salía de la pastilla, pisando el borde redondeado. Se baja un
+    // punto la letra a partir de cuatro —**todas**, no solo la larga, o el grupo
+    // se lee como cuatro botones distintos—.
+    final apretado = opciones.length >= 4;
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
@@ -320,16 +326,34 @@ class FieldSwitch<T> extends StatelessWidget {
                 onTap: () => onChange(v),
                 child: Container(
                   alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  padding: EdgeInsets.symmetric(vertical: apretado ? 8 : 9, horizontal: 4),
                   decoration: BoxDecoration(
                     color: valor == v ? colors.surface : null,
                     borderRadius: BorderRadius.circular(Radii.pill),
                   ),
-                  child: Text(
-                    etiqueta,
-                    textAlign: TextAlign.center,
-                    style: AppText.bodyMedium(
-                      valor == v ? colors.foreground : colors.oliveInk.withValues(alpha: 0.6),
+                  // Y por si acaso: en una pantalla más angosta, o con una letra
+                  // más ancha que la del diseño, la etiqueta se encoge en vez de
+                  // desbordarse. Cortada con puntos suspensivos no serviría —el
+                  // rótulo **es** la opción—.
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      etiqueta,
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      style:
+                          (apretado
+                                  ? AppText.small(
+                                      valor == v
+                                          ? colors.foreground
+                                          : colors.oliveInk.withValues(alpha: 0.6),
+                                    )
+                                  : AppText.bodyMedium(
+                                      valor == v
+                                          ? colors.foreground
+                                          : colors.oliveInk.withValues(alpha: 0.6),
+                                    ))
+                              .copyWith(fontWeight: FontWeight.w500),
                     ),
                   ),
                 ),
