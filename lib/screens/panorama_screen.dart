@@ -563,7 +563,17 @@ Future<void> _exportar(BuildContext context, WidgetRef ref, PeriodoElegido perio
   final user = ref.read(userProvider);
   final transacciones = ref.read(periodTransactionsProvider).valueOrNull ?? const <Transaction>[];
   final (desde, hasta) = periodo.rango(DateTime.now());
+  // Y con la foto de lo que tienes y lo que debes: el periodo dice qué pasó, y
+  // esto dice en qué te dejó.
+  // `await` y no `valueOrNull`: acá no se está construyendo nada, se está
+  // respondiendo a un toque. Con el provider todavía cargando, `valueOrNull`
+  // devuelve una lista vacía y el archivo saldría sin saldos sin decir por qué.
+  final patrimonio = patrimonioDeHoy(
+    cuentas: await ref.read(accountsProvider.future),
+    deudas: await ref.read(debtsProvider.future),
+  );
   final resultado = buildExport(
+    patrimonio: patrimonio,
     transacciones: transacciones,
     formato: formato,
     periodoId: periodo.id,
