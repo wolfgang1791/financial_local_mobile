@@ -1317,11 +1317,11 @@ class _SeccionMasGrandes extends StatelessWidget {
                 context,
                 title: 'Gastos ${periodo.enFrase(DateTime.now())}',
                 subtitle: '${ordenados.length} movimientos',
-                builder: (context) => _ListaCompleta(
+                builder: (context) => ListaCompletaDeGastos(
                   gastos: ordenados,
                   ocultos: ocultos,
-                  total: total,
                   currency: currency,
+                  onToggle: onToggle,
                 ),
               ),
               child: _VerTodos(cuantos: ordenados.length, mas: resto),
@@ -1372,23 +1372,58 @@ class _VerTodos extends StatelessWidget {
 /// Por fecha y no por monto: la tarjeta responde "cuáles fueron los más
 /// grandes"; acá uno recorre lo que pasó, y eso se recorre en el tiempo. Mismo
 /// conjunto, dos lecturas.
-class _ListaCompleta extends StatelessWidget {
-  const _ListaCompleta({
+///
+/// Con ojito, como la lista de la tarjeta y como el historial. Sin él, la lista
+/// larga —justo la que se abre para revisar de verdad— era la única donde no se
+/// podía preguntar "¿y sin este?": mostraba apagado lo que ya estaba descontado
+/// pero no dejaba descontar nada, que es enseñar el resultado de un gesto sin
+/// dar el gesto.
+///
+/// Pública para poder probarla sola: montar Panorama entera en un test no
+/// termina nunca —tiene gráficos y refresco vivos—.
+class ListaCompletaDeGastos extends StatefulWidget {
+  const ListaCompletaDeGastos({
+    super.key,
     required this.gastos,
     required this.ocultos,
-    required this.total,
     required this.currency,
+    required this.onToggle,
   });
 
   final List<Transaction> gastos;
   final Set<String> ocultos;
-  final double total;
   final String currency;
+
+  /// Cada toque también viaja hacia arriba: al cerrar el modal, el anillo y la
+  /// tarjeta tienen que estar descontando exactamente lo mismo que esta lista.
+  /// Sin esto habría dos verdades sobre el mismo periodo.
+  final void Function(String id) onToggle;
+
+  @override
+  State<ListaCompletaDeGastos> createState() => _ListaCompletaDeGastosState();
+}
+
+class _ListaCompletaDeGastosState extends State<ListaCompletaDeGastos> {
+  /// La copia local es lo que hace que el total de abajo se mueva al tocar un
+  /// ojito: el modal se construye una vez y no se entera de que el estado de
+  /// Panorama cambió detrás.
+  late final Set<String> _ocultos = {...widget.ocultos};
+
+  void _alternar(String id) {
+    setState(() {
+      if (!_ocultos.remove(id)) _ocultos.add(id);
+    });
+    widget.onToggle(id);
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.of(context);
-    final porFecha = [...gastos]..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+    final porFecha = [...widget.gastos]..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+    final total = porFecha
+        .where((t) => !_ocultos.contains(t.id))
+        .fold<double>(0, (s, t) => s + t.amount);
+    final descontados = porFecha.where((t) => _ocultos.contains(t.id)).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1396,20 +1431,33 @@ class _ListaCompleta extends StatelessWidget {
         ExpenseRows(
           transactions: porFecha,
           total: total,
-          currency: currency,
-          hidden: ocultos,
+          currency: widget.currency,
+          hidden: _ocultos,
+          onToggleHide: _alternar,
           numbered: false,
         ),
         const SizedBox(height: Spacing.lg),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'TOTAL MOSTRADO',
-              style: AppText.kicker(colors.oliveInk.withValues(alpha: 0.6)).copyWith(fontSize: 9.5),
+            Expanded(
+              child: Text(
+                // Un total descontado sin aviso es un total equivocado: se dice
+                // cuántos se sacaron, igual que en el historial.
+                descontados == 0
+                    ? 'TOTAL MOSTRADO'
+                    : 'TOTAL MOSTRADO · SIN $descontados '
+                          '${descontados == 1 ? "DESCONTADO" : "DESCONTADOS"}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.kicker(
+                  colors.oliveInk.withValues(alpha: 0.6),
+                ).copyWith(fontSize: 9.5),
+              ),
             ),
+            const SizedBox(width: Spacing.sm),
             Text(
-              Money.format(total, currency),
+              Money.format(total, widget.currency),
               style: AppText.money(colors.foreground, size: 14, weight: FontWeight.w600),
             ),
           ],
@@ -1419,19 +1467,6 @@ class _ListaCompleta extends StatelessWidget {
   }
 }
 
-// ── Cuándo se te fue ──────────────────────────
-
-/// El gasto en el tiempo, en las dos escalas: los días del periodo elegido y
-/// los meses.
-///
-/// Una tarjeta y un conmutador, no dos tarjetas apiladas. Es la misma pregunta
-/// —"¿cuándo se me fue?"— vista de cerca y de lejos, y separarlas obligaba a
-/// elegir cuál mirar antes de haber mirado ninguna, además de empujar hacia
-/// abajo todo lo que sigue.
-///
-/// Los dos ejes cuentan lo mismo que el anillo: los gastos ya llegan filtrados
-/// por los interruptores de la cabecera, y la curva mensual los aplica sobre sus
-/// propias piezas. Un mismo interruptor, un mismo número en las tres.
 class _GastoEnElTiempo extends ConsumerStatefulWidget {
   const _GastoEnElTiempo({
     required this.gastos,
