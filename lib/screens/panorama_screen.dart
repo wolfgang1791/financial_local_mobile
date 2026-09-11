@@ -24,6 +24,8 @@ import '../ui/net_worth_chart.dart';
 import '../ui/refreshable_screen.dart';
 import '../ui/todo_oculto.dart';
 import '../ui/surface.dart';
+import '../data/bundle.dart';
+import '../local_db/database.dart';
 import 'nuevo_movimiento.dart';
 import 'shell.dart';
 
@@ -540,25 +542,43 @@ class _PanoramaScreenState extends ConsumerState<PanoramaScreen> {
 /// en iOS/Android, y la hoja de compartir es el gesto nativo de "sácalo de
 /// la app": Archivos, Drive, correo, lo que el usuario elija.
 Future<void> _exportar(BuildContext context, WidgetRef ref, PeriodoElegido periodo) async {
-  final formato = await showAppModal<ExportFormat>(
+  final elegido = await showAppModal<String>(
     context,
-    title: 'Exportar movimientos',
+    title: 'Exportar',
     subtitle: periodo.etiqueta(DateTime.now()),
     builder: (context) => Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FieldOption(titulo: 'CSV', onTap: () => Navigator.of(context).pop(ExportFormat.csv)),
+        FieldOption(titulo: 'CSV', onTap: () => Navigator.of(context).pop('csv')),
+        FieldOption(titulo: 'Excel (XLSX)', onTap: () => Navigator.of(context).pop('xlsx')),
+        FieldOption(titulo: 'JSON', onTap: () => Navigator.of(context).pop('json')),
+        FieldOption(titulo: 'Markdown', onTap: () => Navigator.of(context).pop('md')),
+        // El paquete no es un quinto formato de lectura: los otros cuatro son
+        // para mirar el periodo que tienes delante, y este es todo lo que
+        // registraste acá para que la web se lo quede. Va con su propia
+        // explicación porque hace algo distinto de los de arriba.
         FieldOption(
-          titulo: 'Excel (XLSX)',
-          onTap: () => Navigator.of(context).pop(ExportFormat.xlsx),
+          titulo: 'Llevar a la web',
+          subtitulo: 'Todo lo registrado en el teléfono, para importarlo allá',
+          onTap: () => Navigator.of(context).pop('paquete'),
         ),
-        FieldOption(titulo: 'JSON', onTap: () => Navigator.of(context).pop(ExportFormat.json)),
-        FieldOption(titulo: 'Markdown', onTap: () => Navigator.of(context).pop(ExportFormat.md)),
       ],
     ),
   );
-  if (formato == null || !context.mounted) return;
+  if (elegido == null || !context.mounted) return;
+
+  if (elegido == 'paquete') {
+    await _compartirPaquete(context);
+    return;
+  }
+
+  final formato = switch (elegido) {
+    'xlsx' => ExportFormat.xlsx,
+    'json' => ExportFormat.json,
+    'md' => ExportFormat.md,
+    _ => ExportFormat.csv,
+  };
 
   final user = ref.read(userProvider);
   final transacciones = ref.read(periodTransactionsProvider).valueOrNull ?? const <Transaction>[];
@@ -599,6 +619,40 @@ Future<void> _exportar(BuildContext context, WidgetRef ref, PeriodoElegido perio
       tone: FeedbackTone.aviso,
     );
   }
+}
+
+/// El paquete con todo lo registrado en el teléfono, para importarlo en la web.
+///
+/// Se comparte igual que los demás archivos —no hay carpeta de descargas propia
+/// en el teléfono— y se dice cuántas filas lleva: un archivo del que no se sabe
+/// qué trae no se manda con confianza.
+Future<void> _compartirPaquete(BuildContext context) async {
+  final paquete = await construirPaquete(await LocalDatabase.open());
+  final hoy = DateTime.now();
+  final sufijo =
+      '${hoy.year}${hoy.month.toString().padLeft(2, '0')}${hoy.day.toString().padLeft(2, '0')}';
+
+  await SharePlus.instance.share(
+    ShareParams(
+      files: [XFile.fromData(paquete.bytes, mimeType: 'application/json')],
+      fileNameOverrides: ['financial-para-la-web-$sufijo.json'],
+    ),
+  );
+
+  if (!context.mounted) return;
+  final detalle = paquete.filas.entries
+      .where((e) => e.value > 0)
+      .map((e) => '${e.value} de ${e.key}')
+      .join(', ');
+  await showFeedback(
+    context,
+    title: 'Listo para importar',
+    message:
+        'El archivo lleva ${paquete.total} filas: $detalle.\n\n'
+        'En la web, entra a Movimientos → Importar y súbelo. Lo que ya esté allá '
+        'no se duplica: cada registro viaja con su identificador.',
+    tone: FeedbackTone.exito,
+  );
 }
 
 // ── Periodo ───────────────────────────────────
