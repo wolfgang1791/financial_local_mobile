@@ -60,36 +60,50 @@ class _ChipFiltro extends StatelessWidget {
   final String texto;
   final VoidCallback? onQuitar;
 
-  /// Qué hace al tocarlo cuando no se puede soltar: cambiarlo. Es el caso del
-  /// corte de la comparación — siempre hay uno, así que el gesto útil no es
-  /// quitarlo sino elegir otro.
+  /// Qué hace al tocar **el texto**: cambiarlo. Es el caso del mes comparado y
+  /// del corte — cosas que siempre tienen un valor, así que el gesto útil no es
+  /// soltarlas sino elegir otro.
   final VoidCallback? onTocar;
 
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.of(context);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onQuitar ?? onTocar,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: colors.sage.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(Radii.pill),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(texto, style: AppText.tiny(colors.sageInk).copyWith(fontWeight: FontWeight.w600)),
-            if (onQuitar != null) ...[
-              const SizedBox(width: 5),
-              AppIcon(AppIconData.close, size: 11, color: colors.sageInk),
-            ] else if (onTocar != null) ...[
-              const SizedBox(width: 5),
-              AppIcon(AppIconData.chevronRight, size: 11, color: colors.sageInk),
-            ],
+
+    // Dos zonas y no un solo gesto para los dos.
+    //
+    // Antes el chip entero hacía `onQuitar ?? onTocar`: con los dos definidos,
+    // tocarlo soltaba el filtro y `onTocar` no se ejecutaba nunca — un control
+    // que existe y no se puede alcanzar. Ahora el texto cambia y la × suelta,
+    // que es lo que cada parte ya prometía con su forma.
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: colors.sage.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(Radii.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTocar ?? onQuitar,
+            child: Text(
+              texto,
+              style: AppText.tiny(colors.sageInk).copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (onQuitar != null) ...[
+            const SizedBox(width: 5),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onQuitar,
+              child: AppIcon(AppIconData.close, size: 11, color: colors.sageInk),
+            ),
+          ] else if (onTocar != null) ...[
+            const SizedBox(width: 5),
+            AppIcon(AppIconData.chevronRight, size: 11, color: colors.sageInk),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -1036,8 +1050,16 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
             runSpacing: 6,
             children: [
               if (_compararMes != null) ...[
+                // El chip que dice con qué mes comparas **es** el que lo cambia.
+                //
+                // Solo llevaba la × para salir: cambiar de mes exigía adivinar
+                // que había que volver a tocar la pastilla de "Comparar", que ya
+                // estaba activa — tocar un modo encendido para reconfigurarlo no
+                // se le ocurre a nadie. Lo que nombra un estado es donde se
+                // busca cómo cambiarlo, igual que en la web.
                 _ChipFiltro(
                   texto: 'comparando con ${_etiquetaMes(_compararMes!)}',
+                  onTocar: _elegirMesComparado,
                   onQuitar: () {
                     setState(() => _compararMes = null);
                     _recargar();
