@@ -229,8 +229,15 @@ class _FormularioFlujoState extends ConsumerState<_FormularioFlujo> {
     final ok = await showFeedback(
       context,
       title: '¿Eliminar "${widget.flujo!.name}"?',
+      // Lo que de verdad pasa, dicho en meses y no en tablas.
+      //
+      // Antes decía "no borra los movimientos ya registrados", que es cierto y
+      // no contesta la pregunta que uno se hace con el dedo encima del botón:
+      // "¿voy a perder julio y agosto?". La respuesta es que no, y ese es el
+      // motivo por el que se puede tocar con tranquilidad.
       message:
-          'Esto no borra los movimientos ya registrados, solo deja de pedir que se marque cada mes.',
+          'Deja de aparecer de este mes en adelante. Los meses anteriores lo siguen '
+          'mostrando, con lo que pagaste en cada uno.',
       tone: FeedbackTone.aviso,
       confirmLabel: 'Sí, eliminar',
       cancelLabel: 'Cancelar',
