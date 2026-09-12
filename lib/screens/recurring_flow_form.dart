@@ -11,6 +11,7 @@ import '../ui/buttons.dart';
 import '../ui/calendar.dart';
 import '../ui/category_field.dart';
 import '../ui/fields.dart';
+import '../ui/historia_del_flujo.dart';
 import '../ui/format.dart';
 import '../ui/icons.dart';
 import '../ui/modal.dart';
@@ -375,6 +376,13 @@ class _FormularioFlujoState extends ConsumerState<_FormularioFlujo> {
               ),
             ),
           ],
+          // Cómo viene cambiando. Debajo del mes que estás editando porque es la
+          // pregunta que sigue a verlo: "¿y el mes pasado?".
+          HistoriaDelFlujo(
+            meses: widget.flujo!.months,
+            mesElegido: widget.mes,
+            currency: ref.watch(userProvider).currency,
+          ),
         ],
         const SizedBox(height: Spacing.lg),
         const FieldLabel('Categoría'),
