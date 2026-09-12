@@ -4,6 +4,14 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- Para poder dejarle a la app el paquete que baja la web: con estas dos, la
+	     carpeta de la app aparece en Archivos y el .json se copia ahí desde donde
+	     sea (Descargas, Drive, el correo). Sin ellas no hay forma de meter un
+	     archivo sin añadir un selector nativo. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

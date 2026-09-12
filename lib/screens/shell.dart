@@ -11,6 +11,7 @@ import '../ui/refreshable_screen.dart';
 import 'decisiones_screen.dart';
 import 'deudas_screen.dart';
 import 'diagnostico_screen.dart';
+import 'traer_de_la_web.dart';
 import 'movimientos_screen.dart';
 import 'objetivos_screen.dart';
 import 'panorama_screen.dart';
@@ -324,6 +325,20 @@ class _CuentaMenu extends ConsumerWidget {
               const SizedBox(height: Spacing.sm),
               // Debajo del tema y encima de salir: es lo que se busca cuando
               // algo no cuadra, y no se toca ningún otro día.
+              // Traer lo de la web: se hace cada tanto, cuando el teléfono se
+              // quedó atrás. Va acá y no en Panorama junto a "Exportar" porque
+              // no es parte de mirar tus cifras — es mantenimiento, como el
+              // diagnóstico de abajo.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).pop('traer'),
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  alignment: Alignment.centerLeft,
+                  child: Text('Traer lo de la web', style: AppText.body(colors.foreground)),
+                ),
+              ),
+              const SizedBox(height: Spacing.sm),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => Navigator.of(context).pop('diagnostico'),
@@ -351,6 +366,8 @@ class _CuentaMenu extends ConsumerWidget {
         );
         if (accion == 'salir') {
           await ref.read(sessionProvider.notifier).signOut();
+        } else if (accion == 'traer' && context.mounted) {
+          await abrirTraerDeLaWeb(context, ref);
         } else if (accion == 'diagnostico' && context.mounted) {
           await Navigator.of(
             context,
