@@ -829,6 +829,12 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
     // Con una sola cuenta el nombre no aporta: sería la misma palabra en cada
     // fila. Con dos es lo que uno viene a comprobar.
     final variasCuentas = (ref.watch(accountsProvider).valueOrNull ?? const []).length > 1;
+    // La serie de hitos, observada acá aunque esta pantalla no la dibuje: es de
+    // donde salen los meses que se pueden comparar. Con `read` a secas nadie la
+    // pedía nunca —`valueOrNull` contesta null mientras el provider no se haya
+    // resuelto— y el selector caía siempre al respaldo de un solo mes. Es el
+    // mismo fallo que ya nos costó el selector de cuentas al marcar un flujo.
+    ref.watch(netWorthMonthlyProvider);
 
     // Cuántas filas quedan sin mostrar, que es lo que decide si hay "ver más".
     final faltan = _total - _items.length > 0 ? _total - _items.length : 0;
@@ -1282,15 +1288,29 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
 
   /// Los últimos 6 meses calendario antes del actual, más nuevo primero —
   /// los mismos que ofrece la web (`recentMonthKeys`).
+  /// Los meses que de verdad tienen movimientos, de más nuevo a más viejo.
+  ///
+  /// Antes se ofrecían los seis anteriores del calendario, tuvieran registros o
+  /// no: con dos meses de historia, cuatro opciones llevaban a una columna vacía
+  /// —y parecía que la app se había roto— mientras que un mes más viejo que esos
+  /// seis no se podía elegir aunque estuviera lleno. La lista sale de los hitos,
+  /// que es quien sabe en qué meses pasó algo.
+  ///
+  /// El que está en curso queda fuera: compararlo consigo mismo no dice nada.
+  ///
+  /// El respaldo es para la primera vez, cuando todavía no cerró ningún mes:
+  /// ofrecer el anterior deja el modo comparar con algo que elegir en vez de un
+  /// selector vacío.
   List<String> _mesesParaComparar() {
+    final serie = ref.read(netWorthMonthlyProvider).valueOrNull ?? const <NetWorthPoint>[];
+    final conRegistros =
+        serie.where((p) => !p.enCurso && p.etiqueta.isNotEmpty).map((p) => p.etiqueta).toList()
+          ..sort((a, b) => b.compareTo(a));
+    if (conRegistros.isNotEmpty) return conRegistros;
+
     final hoy = DateTime.now();
-    return [
-      for (var i = 1; i <= 6; i++)
-        () {
-          final d = DateTime(hoy.year, hoy.month - i, 1);
-          return '${d.year}-${d.month.toString().padLeft(2, '0')}';
-        }(),
-    ];
+    final anterior = DateTime(hoy.year, hoy.month - 1, 1);
+    return ['${anterior.year}-${anterior.month.toString().padLeft(2, '0')}'];
   }
 
   String _etiquetaMes(String clave) {
