@@ -100,6 +100,26 @@ Future<void> abrirTraerDeLaWeb(BuildContext context, WidgetRef ref) async {
   );
 }
 
+/// Cómo se llama cada tabla para quien mira el informe.
+///
+/// El paquete viaja con los nombres del esquema —`RecurringFlowMonth`— porque
+/// las dos bases hablan ese idioma entre ellas. La pantalla no: quien trae sus
+/// datos no tiene por qué saber cómo se llaman nuestras tablas, y
+/// "Transaction: 5" le obliga a traducir para entender qué acaba de aceptar.
+const _nombreDeTabla = {
+  'Category': 'Tus categorías',
+  'Account': 'Cuentas',
+  'RecurringFlow': 'Gastos fijos e ingresos',
+  'RecurringFlowMonth': 'Meses de esos gastos',
+  'Debt': 'Deudas',
+  'DebtPayment': 'Cuotas de deudas',
+  'Transaction': 'Movimientos',
+  'ValueChange': 'Cambios que registraste',
+  'ExchangeRate': 'Tipos de cambio',
+};
+
+String _enEspanol(String tabla) => _nombreDeTabla[tabla] ?? tabla;
+
 /// El `.json` más nuevo de la carpeta de la app.
 ///
 /// El más reciente y no "el que se llame así": el nombre lo pone el navegador al
@@ -150,7 +170,7 @@ class _Resumen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      t.tabla,
+                      _enEspanol(t.tabla),
                       style: AppText.small(colors.oliveInk.withValues(alpha: 0.75)),
                     ),
                   ),
